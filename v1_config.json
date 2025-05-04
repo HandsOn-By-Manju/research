@@ -1,0 +1,48 @@
+{
+  "input_csv": "input_file.csv",
+  "output_excel": "output_file.xlsx",
+  "anex_file": "Anex.xlsx",
+
+  "columns_to_remove": [
+    "DummyColumn1", "DummyColumn2", "DummyColumn3",
+    "DummyColumn4", "DummyColumn5", "DummyColumn6",
+    "DummyColumn7", "DummyColumn8", "DummyColumn9"
+  ],
+
+  "columns_to_add": ["Col1", "Col2", "Col3", "Col4", "Col5", "Col6", "Col7", "Col8"],
+
+  "mappings": [
+    {
+      "sheet": "Anex1",
+      "key": "Policy ID",
+      "columns": {
+        "Policy Statement": "Col1",
+        "Policy Remediation": "Col2"
+      },
+      "not_found_message": "Policy details doesn't exist",
+      "unmatched_log": "unmatched_policy_ids.txt"
+    },
+    {
+      "sheet": "Anex2",
+      "key": "Subscription ID",
+      "columns": {
+        "Environment": "Col3",
+        "Primary Contact": "Col4"
+      },
+      "not_found_message": "Environment/contact info not found",
+      "unmatched_log": "unmatched_subscription_ids.txt"
+    },
+    {
+      "sheet": "Anex3",
+      "key": "Contact",
+      "columns": {
+        "M1": "Col5",
+        "M2": "Col6",
+        "M3": "Col7",
+        "M4": "Col8"
+      },
+      "not_found_message": "Data not available",
+      "unmatched_log": "unmatched_anex3_contacts.txt"
+    }
+  ]
+}
