@@ -1,5 +1,6 @@
 import pandas as pd
 import time
+import difflib
 
 # === Configurable Inputs ===
 input_csv = "input_file.csv"
@@ -154,6 +155,19 @@ try:
     df_contact.columns = df_contact.columns.str.strip()
     df.columns = df.columns.str.strip()
 
+    # Check for missing columns
+    actual_columns = df_contact.columns.tolist()
+    missing_columns = [col for col in manager_columns if col not in actual_columns]
+
+    if missing_columns:
+        print(f"❌ Missing columns in '{anex3_sheet}': {missing_columns}")
+        for col in missing_columns:
+            suggestions = difflib.get_close_matches(col, actual_columns, n=1, cutoff=0.6)
+            if suggestions:
+                print(f"   💡 Did you mean: {suggestions[0]} for '{col}'?")
+        raise Exception("Required columns not found in contact sheet")
+
+    # Proceed with mapping
     df_contact[primary_contact_column] = df_contact[primary_contact_column].astype(str).str.strip()
     df[primary_contact_column] = df[primary_contact_column].astype(str).str.strip()
 
