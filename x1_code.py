@@ -58,18 +58,33 @@ for mapping in mappings:
         source_to_target = mapping["source_to_target"]
 
         map_df = pd.read_excel(mapping_file, sheet_name=mapping_sheet)
+
+        # Strip and normalize join columns
+        df[join_column] = df[join_column].astype(str).str.strip()
+        map_df[join_column] = map_df[join_column].astype(str).str.strip()
+
         columns_needed = [join_column] + list(source_to_target.keys())
         df = df.merge(map_df[columns_needed], on=join_column, how="left", suffixes=('', '_map'))
 
+        # Fill target fields with fallback text and drop source columns
         for src_col, target_col in source_to_target.items():
             df[target_col] = df[src_col].fillna(f"{target_col} not available")
-
         df.drop(columns=list(source_to_target.keys()), inplace=True)
-        print(f"✅ {mapping['name']} complete.")
+
+        # Log unmatched join_column values
+        unmatched = df[df[list(source_to_target.values())[0]] == f"{list(source_to_target.values())[0]} not available"][join_column].dropna().unique()
+        if len(unmatched) > 0:
+            filename = f"unmatched_{join_column.replace(' ', '_').lower()}.txt"
+            with open(filename, "w") as f:
+                for value in unmatched:
+                    f.write(f"{value}\n")
+            print(f"📝 Unmatched {join_column} values written to {filename}")
+
+        print(f"✅ {mapping['name']} complete.\n")
 
     except Exception as e:
         print(f"❌ Error in mapping '{mapping.get('name', 'Unnamed Mapping')}': {e}")
 
-# Step 7: Save result
+# Step 7: Save final result
 df.to_excel(output_excel, index=False)
-print(f"✅ Saved result to '{output_excel}' in {time.time() - start_time:.2f} seconds.")
+print(f"✅ Final Excel saved as '{output_excel}' in {time.time() - start_time:.2f} seconds.")
