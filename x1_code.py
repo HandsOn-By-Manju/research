@@ -121,7 +121,7 @@ for check in validation_checks:
     except Exception as e:
         print(f"❌ Error validating {name}: {e}")
 
-# Step 7: Map Description and Remediation Steps from Anex1_Remediation_Sheet
+# Step 7: Map Description and Remediation Steps using Policy ID
 print("\n🧩 Mapping 'Description' and 'Remediation Steps' using Policy ID...")
 try:
     df_remed = pd.read_excel(anex_file, sheet_name="Anex1_Remediation_Sheet")
@@ -145,8 +145,11 @@ try:
     df_env = pd.read_excel(anex_file, sheet_name="Anex2_Sub_Sheet")
     df_env["Subscription ID"] = df_env["Subscription ID"].astype(str).str.strip()
 
+    # Drop placeholders before merge to avoid _env suffix
+    df.drop(columns=["Environment", "Primary Contact"], inplace=True, errors="ignore")
+
     df = df.merge(df_env[["Subscription ID", "Environment", "Primary Contact"]],
-                  on="Subscription ID", how="left", suffixes=("", "_env"))
+                  on="Subscription ID", how="left")
 
     df["Environment"] = df["Environment"].fillna("Environment not available")
     df["Primary Contact"] = df["Primary Contact"].fillna("Primary contact not available")
