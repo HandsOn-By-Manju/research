@@ -23,13 +23,26 @@
   "account_column_name": "Account",
   "resource_column_name": "Resource ID",
 
-  "remediation_mapping": {
-    "file": "Report_Anex.xlsx",
-    "sheet": "Anex1_Remediation_Sheet",
-    "join_column": "Policy ID",
-    "source_to_target": {
-      "Policy Statement": "Description",
-      "Policy Remediation": "Remediation Steps"
+  "mappings": [
+    {
+      "name": "Remediation Mapping",
+      "file": "Report_Anex.xlsx",
+      "sheet": "Anex1_Remediation_Sheet",
+      "join_column": "Policy ID",
+      "source_to_target": {
+        "Policy Statement": "Description",
+        "Policy Remediation": "Remediation Steps"
+      }
+    },
+    {
+      "name": "Subscription Mapping",
+      "file": "Report_Anex.xlsx",
+      "sheet": "Anex2_Sub_Sheet",
+      "join_column": "Subscription ID",
+      "source_to_target": {
+        "Environment": "Environment",
+        "Primary Contact": "Primary Contact"
+      }
     }
-  }
+  ]
 }
