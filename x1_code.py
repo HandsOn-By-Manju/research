@@ -8,12 +8,12 @@ with open("config.json") as f:
 
 input_csv = config["input_csv"]
 output_excel = config["output_excel"]
-columns_to_remove = config["columns_to_remove"]
-columns_to_add = config["columns_to_add"]
+columns_to_remove = config.get("columns_to_remove", [])
+columns_to_add = config.get("columns_to_add", [])
 parse_account = config.get("parse_account_column", True)
 account_col = config.get("account_column_name", "Account")
 resource_col = config.get("resource_column_name", "Resource ID")
-remediation_mapping = config.get("remediation_mapping", {})
+mappings = config.get("mappings", [])
 
 start_time = time.time()
 print("\n🚀 Starting processing using config file...")
@@ -41,36 +41,35 @@ else:
 # Step 4: Drop unwanted columns
 existing_to_drop = [col for col in columns_to_remove if col in df.columns]
 df.drop(columns=existing_to_drop, inplace=True)
-print(f"🧹 Dropped columns: {existing_to_drop if existing_to_drop else 'None found to remove'}")
+print(f"🧹 Dropped columns: {existing_to_drop if existing_to_drop else 'None'}")
 
 # Step 5: Add new blank columns
 print(f"➕ Adding blank columns: {columns_to_add}")
 for col in columns_to_add:
     df[col] = ''
 
-# Step 6: Fill Description and Remediation Steps from external Excel
-if remediation_mapping:
-    print("🔄 Mapping remediation fields from external sheet using config")
+# Step 6: Perform mappings from external sheets
+for mapping in mappings:
     try:
-        remediation_file = remediation_mapping["file"]
-        remediation_sheet = remediation_mapping["sheet"]
-        join_column = remediation_mapping["join_column"]
-        source_to_target = remediation_mapping["source_to_target"]
+        print(f"🔄 Performing: {mapping.get('name', 'Unnamed Mapping')}")
+        mapping_file = mapping["file"]
+        mapping_sheet = mapping["sheet"]
+        join_column = mapping["join_column"]
+        source_to_target = mapping["source_to_target"]
 
-        anex_df = pd.read_excel(remediation_file, sheet_name=remediation_sheet)
+        map_df = pd.read_excel(mapping_file, sheet_name=mapping_sheet)
         columns_needed = [join_column] + list(source_to_target.keys())
-        df = df.merge(anex_df[columns_needed], on=join_column, how="left", suffixes=('', '_anex'))
+        df = df.merge(map_df[columns_needed], on=join_column, how="left", suffixes=('', '_map'))
 
         for src_col, target_col in source_to_target.items():
             df[target_col] = df[src_col].fillna(f"{target_col} not available")
 
         df.drop(columns=list(source_to_target.keys()), inplace=True)
-        print("✅ Remediation mapping complete.")
-    except Exception as e:
-        print(f"❌ Failed to map remediation data: {e}")
-else:
-    print("⚠️ No remediation mapping provided in config — skipping Step 6")
+        print(f"✅ {mapping['name']} complete.")
 
-# Save result
+    except Exception as e:
+        print(f"❌ Error in mapping '{mapping.get('name', 'Unnamed Mapping')}': {e}")
+
+# Step 7: Save result
 df.to_excel(output_excel, index=False)
 print(f"✅ Saved result to '{output_excel}' in {time.time() - start_time:.2f} seconds.")
