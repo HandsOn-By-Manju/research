@@ -139,7 +139,24 @@ try:
 except Exception as e:
     print(f"❌ Error during remediation mapping: {e}")
 
-# Step 8: Save Output
+# Step 8: Map Environment and Primary Contact using Subscription ID
+print("\n📌 Mapping 'Environment' and 'Primary Contact' using Subscription ID...")
+try:
+    df_env = pd.read_excel(anex_file, sheet_name="Anex2_Sub_Sheet")
+    df_env["Subscription ID"] = df_env["Subscription ID"].astype(str).str.strip()
+
+    df = df.merge(df_env[["Subscription ID", "Environment", "Primary Contact"]],
+                  on="Subscription ID", how="left", suffixes=("", "_env"))
+
+    df["Environment"] = df["Environment"].fillna("Environment not available")
+    df["Primary Contact"] = df["Primary Contact"].fillna("Primary contact not available")
+
+    print("✅ Environment and Primary Contact fields filled successfully.")
+
+except Exception as e:
+    print(f"❌ Error during environment/contact mapping: {e}")
+
+# Step 9: Save Output
 df.to_excel(output_excel, index=False)
 print(f"\n✅ Final file saved to: {output_excel}")
 print(f"⏱️ Time taken: {time.time() - start_time:.2f} seconds")
