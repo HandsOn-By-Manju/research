@@ -52,7 +52,6 @@ validation_checks = [
     {"name": "Policy ID", "sheet": anex1_sheet, "join_column": "Policy ID"}
 ]
 
-# === Start Execution ===
 start_time = time.time()
 print("\n🚀 Starting preprocessing and validation...")
 
@@ -60,7 +59,7 @@ print("\n🚀 Starting preprocessing and validation...")
 df = pd.read_csv(input_csv)
 print(f"✅ Loaded input file: {input_csv}")
 
-# Step 1.5: Rename columns
+# Rename for consistency
 df.rename(columns={
     "Cloud provider": "Cloud Provider",
     "Policy statement": "Policy Statement",
@@ -108,11 +107,11 @@ for check in validation_checks:
         print(f"❌ Error validating {check['name']}: {e}")
 
 # Step 7: Map Description & Remediation
+df.drop(columns=["Policy Statement", "Policy Remediation"], inplace=True, errors="ignore")
 try:
     df_remed = pd.read_excel(anex_file, sheet_name=anex1_sheet)
     df_remed["Policy ID"] = df_remed["Policy ID"].astype(str).str.strip()
-    df = df.merge(df_remed[["Policy ID", "Policy Statement", "Policy Remediation"]],
-                  on="Policy ID", how="left")
+    df = df.merge(df_remed[["Policy ID", "Policy Statement", "Policy Remediation"]], on="Policy ID", how="left")
     df["Description"] = df["Policy Statement"].fillna("Policy details not available")
     df["Remediation Steps"] = df["Policy Remediation"].fillna("Remediation steps not available")
     df.drop(columns=["Policy Statement", "Policy Remediation"], inplace=True, errors="ignore")
@@ -121,11 +120,11 @@ except Exception as e:
     print(f"❌ Error mapping remediation: {e}")
 
 # Step 8: Map Environment & Primary Contact
+df.drop(columns=["Environment", primary_contact_column], inplace=True, errors="ignore")
 try:
     df_env = pd.read_excel(anex_file, sheet_name=anex2_sheet)
     df_env["Subscription ID"] = df_env["Subscription ID"].astype(str).str.strip()
-    df = df.merge(df_env[["Subscription ID", "Environment", primary_contact_column]],
-                  on="Subscription ID", how="left")
+    df = df.merge(df_env[["Subscription ID", "Environment", primary_contact_column]], on="Subscription ID", how="left")
     df["Environment"] = df["Environment"].fillna("Environment not available")
     df[primary_contact_column] = df[primary_contact_column].fillna("Primary contact not available")
     print("✅ Mapped Environment and Primary Contact.")
@@ -133,6 +132,7 @@ except Exception as e:
     print(f"❌ Error mapping environment/contact: {e}")
 
 # Step 9: Map Manager Hierarchy
+df.drop(columns=manager_columns, inplace=True, errors="ignore")
 try:
     df_contact = pd.read_excel(anex_file, sheet_name=anex3_sheet)
     df_contact.columns = df_contact.columns.str.strip()
@@ -140,8 +140,7 @@ try:
     if missing_columns:
         print(f"❌ Missing columns in contact sheet: {missing_columns}")
         raise Exception("Missing manager columns.")
-    df = df.merge(df_contact[[primary_contact_column] + manager_columns],
-                  on=primary_contact_column, how="left")
+    df = df.merge(df_contact[[primary_contact_column] + manager_columns], on=primary_contact_column, how="left")
     print("✅ Mapped Manager Hierarchy and BU.")
 except Exception as e:
     print(f"❌ Error mapping contact hierarchy: {e}")
@@ -157,7 +156,6 @@ try:
     wb = load_workbook(output_excel)
     ws = wb.active
 
-    # Formatting
     align = Alignment(horizontal="left", vertical="top", wrap_text=True)
     header_fill = PatternFill(start_color="B7DEE8", end_color="B7DEE8", fill_type="solid")
     header_font = Font(bold=True)
