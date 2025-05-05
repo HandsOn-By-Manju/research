@@ -13,9 +13,10 @@ columns_to_add = config["columns_to_add"]
 parse_account = config.get("parse_account_column", True)
 account_col = config.get("account_column_name", "Account")
 resource_col = config.get("resource_column_name", "Resource ID")
+remediation_mapping = config.get("remediation_mapping", {})
 
 start_time = time.time()
-print("\n🚀 Starting Step 1 to 5 processing using config file...")
+print("\n🚀 Starting processing using config file...")
 
 # Step 1: Load CSV
 df = pd.read_csv(input_csv)
@@ -46,6 +47,29 @@ print(f"🧹 Dropped columns: {existing_to_drop if existing_to_drop else 'None f
 print(f"➕ Adding blank columns: {columns_to_add}")
 for col in columns_to_add:
     df[col] = ''
+
+# Step 6: Fill Description and Remediation Steps from external Excel
+if remediation_mapping:
+    print("🔄 Mapping remediation fields from external sheet using config")
+    try:
+        remediation_file = remediation_mapping["file"]
+        remediation_sheet = remediation_mapping["sheet"]
+        join_column = remediation_mapping["join_column"]
+        source_to_target = remediation_mapping["source_to_target"]
+
+        anex_df = pd.read_excel(remediation_file, sheet_name=remediation_sheet)
+        columns_needed = [join_column] + list(source_to_target.keys())
+        df = df.merge(anex_df[columns_needed], on=join_column, how="left", suffixes=('', '_anex'))
+
+        for src_col, target_col in source_to_target.items():
+            df[target_col] = df[src_col].fillna(f"{target_col} not available")
+
+        df.drop(columns=list(source_to_target.keys()), inplace=True)
+        print("✅ Remediation mapping complete.")
+    except Exception as e:
+        print(f"❌ Failed to map remediation data: {e}")
+else:
+    print("⚠️ No remediation mapping provided in config — skipping Step 6")
 
 # Save result
 df.to_excel(output_excel, index=False)
