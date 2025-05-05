@@ -21,5 +21,15 @@
 
   "parse_account_column": true,
   "account_column_name": "Account",
-  "resource_column_name": "Resource ID"
+  "resource_column_name": "Resource ID",
+
+  "remediation_mapping": {
+    "file": "Report_Anex.xlsx",
+    "sheet": "Anex1_Remediation_Sheet",
+    "join_column": "Policy ID",
+    "source_to_target": {
+      "Policy Statement": "Description",
+      "Policy Remediation": "Remediation Steps"
+    }
+  }
 }
