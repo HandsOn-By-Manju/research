@@ -1,6 +1,8 @@
 import pandas as pd
 import time
 import difflib
+from openpyxl import load_workbook
+from openpyxl.styles import Alignment
 
 # === Configurable Inputs ===
 input_csv = "input_file.csv"
@@ -23,7 +25,6 @@ manager_columns = [
     "BU"
 ]
 
-# === Preprocessing Settings ===
 columns_to_remove = [
     "DummyColumn1", "DummyColumn2", "DummyColumn3",
     "DummyColumn4", "DummyColumn5", "DummyColumn6",
@@ -155,7 +156,6 @@ try:
     df_contact.columns = df_contact.columns.str.strip()
     df.columns = df.columns.str.strip()
 
-    # Check for missing columns
     actual_columns = df_contact.columns.tolist()
     missing_columns = [col for col in manager_columns if col not in actual_columns]
 
@@ -167,7 +167,6 @@ try:
                 print(f"   💡 Did you mean: {suggestions[0]} for '{col}'?")
         raise Exception("Required columns not found in contact sheet")
 
-    # Proceed with mapping
     df_contact[primary_contact_column] = df_contact[primary_contact_column].astype(str).str.strip()
     df[primary_contact_column] = df[primary_contact_column].astype(str).str.strip()
 
@@ -199,7 +198,29 @@ try:
 except Exception as e:
     print(f"❌ Error during contact mapping: {e}")
 
-# Step 10: Save Output
-df.to_excel(output_excel, index=False)
-print(f"\n✅ Final file saved to: {output_excel}")
+# Step 10: Save Output to Excel with Formatting
+print("\n💾 Saving Excel file with formatting...")
+try:
+    df.to_excel(output_excel, index=False)
+
+    wb = load_workbook(output_excel)
+    ws = wb.active
+
+    align = Alignment(horizontal='left', vertical='top', wrap_text=True)
+    for row in ws.iter_rows():
+        for cell in row:
+            cell.alignment = align
+
+    ws.freeze_panes = 'A2'
+
+    for col in ws.columns:
+        max_length = max(len(str(cell.value)) if cell.value else 0 for cell in col)
+        col_letter = col[0].column_letter
+        ws.column_dimensions[col_letter].width = min(max_length + 2, 60)
+
+    wb.save(output_excel)
+    print(f"✅ Final file saved with alignment and formatting: {output_excel}")
+except Exception as e:
+    print(f"❌ Error applying formatting: {e}")
+
 print(f"⏱️ Total time: {time.time() - start_time:.2f} seconds")
