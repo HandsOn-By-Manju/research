@@ -1,12 +1,12 @@
 import pandas as pd
 import time
 
-# === Input and reference files ===
+# === File Inputs ===
 input_csv = "input_file.csv"
 output_excel = "output_step5.xlsx"
 anex_file = "Report_Anex.xlsx"
 
-# === Preprocessing settings ===
+# === Preprocessing Settings ===
 columns_to_remove = [
     "DummyColumn1", "DummyColumn2", "DummyColumn3",
     "DummyColumn4", "DummyColumn5", "DummyColumn6",
@@ -28,7 +28,7 @@ parse_account_column = True
 account_column_name = "Account"
 resource_column_name = "Resource ID"
 
-# === Validation checks ===
+# === Validation Details ===
 validation_checks = [
     {
         "name": "Subscription ID",
@@ -42,21 +42,21 @@ validation_checks = [
     }
 ]
 
-# === Start execution ===
+# === Start Execution ===
 start_time = time.time()
 print("\n🚀 Starting preprocessing and validation...")
 
-# Step 1: Load CSV
+# Step 1: Load Input CSV
 df = pd.read_csv(input_csv)
 print(f"✅ Loaded input file: {input_csv}")
 
-# Step 2: Extract Subscription ID and Name
+# Step 2: Parse Subscription ID and Name from Account
 if parse_account_column and account_column_name in df.columns:
-    print(f"🔧 Extracting Subscription ID and Name from '{account_column_name}'")
+    print(f"🔧 Parsing 'Subscription ID' and 'Subscription Name' from '{account_column_name}'")
     df["Subscription ID"] = df[account_column_name].str.extract(r"^(\S+)\s*\(")[0].str.replace(r"\s+", "", regex=True)
     df["Subscription Name"] = df[account_column_name].str.extract(r"\((.*?)\)")[0].str.replace(r"\s+", "", regex=True)
 
-# Step 3: Clean Resource ID
+# Step 3: Clean Resource ID to extract filename
 if resource_column_name in df.columns:
     print(f"🔧 Cleaning '{resource_column_name}' to extract filename")
     df[resource_column_name] = df[resource_column_name].apply(lambda x: str(x).split("/")[-1])
@@ -77,7 +77,7 @@ for check in validation_checks:
     sheet = check["sheet"]
     join_column = check["join_column"]
 
-    print(f"\n🔍 Validating {name} against '{sheet}' in {anex_file}")
+    print(f"\n🔍 Validating {name} using sheet '{sheet}'")
     try:
         df[join_column] = df[join_column].astype(str).str.strip()
         df_anex = pd.read_excel(anex_file, sheet_name=sheet)
@@ -96,32 +96,50 @@ for check in validation_checks:
 
         # Save unmatched
         if unmatched:
-            unmatched_file = f"unmatched_{join_column.replace(' ', '_').lower()}.txt"
-            with open(unmatched_file, "w") as f:
-                for uid in unmatched_ids:
-                    f.write(f"{uid}\n")
-            print(f"❌ {unmatched} unmatched {name}(s) saved to {unmatched_file}")
+            file_unmatched = f"unmatched_{join_column.replace(' ', '_').lower()}.txt"
+            with open(file_unmatched, "w") as f:
+                for val in unmatched_ids:
+                    f.write(f"{val}\n")
+            print(f"❌ {unmatched} unmatched {name}(s) saved to {file_unmatched}")
         else:
             print(f"✅ All {name}s matched!")
 
         # Save matched
-        matched_file = f"matched_{join_column.replace(' ', '_').lower()}.txt"
-        with open(matched_file, "w") as f:
-            for mid in matched_ids:
-                f.write(f"{mid}\n")
-        print(f"✅ {matched} matched {name}(s) saved to {matched_file}")
+        file_matched = f"matched_{join_column.replace(' ', '_').lower()}.txt"
+        with open(file_matched, "w") as f:
+            for val in matched_ids:
+                f.write(f"{val}\n")
+        print(f"✅ {matched} matched {name}(s) saved to {file_matched}")
 
         # Print summary
-        print(f"📊 Summary for {name}:")
+        print(f"📊 {name} Summary:")
         print(f"   Total     : {total}")
         print(f"   Matched   : {matched}")
         print(f"   Unmatched : {unmatched}")
         print(f"   Match %   : {match_percent}%")
 
     except Exception as e:
-        print(f"❌ Error during validation of {name}: {e}")
+        print(f"❌ Error validating {name}: {e}")
 
-# Step 7: Save preprocessed output
+# Step 7: Map Description and Remediation Steps from Anex1_Remediation_Sheet
+print("\n🧩 Mapping 'Description' and 'Remediation Steps' using Policy ID...")
+try:
+    df_remed = pd.read_excel(anex_file, sheet_name="Anex1_Remediation_Sheet")
+    df_remed["Policy ID"] = df_remed["Policy ID"].astype(str).str.strip()
+
+    df = df.merge(df_remed[["Policy ID", "Policy Statement", "Policy Remediation"]],
+                  on="Policy ID", how="left")
+
+    df["Description"] = df["Policy Statement"].fillna("Policy details not available")
+    df["Remediation Steps"] = df["Policy Remediation"].fillna("Remediation steps not available")
+
+    df.drop(columns=["Policy Statement", "Policy Remediation"], inplace=True)
+    print("✅ Remediation fields filled successfully.")
+
+except Exception as e:
+    print(f"❌ Error during remediation mapping: {e}")
+
+# Step 8: Save Output
 df.to_excel(output_excel, index=False)
-print(f"\n✅ Preprocessed file saved to '{output_excel}'")
-print(f"⏱️ Total time taken: {time.time() - start_time:.2f} seconds")
+print(f"\n✅ Final file saved to: {output_excel}")
+print(f"⏱️ Time taken: {time.time() - start_time:.2f} seconds")
