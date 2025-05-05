@@ -1,75 +1,48 @@
-import pandas as pd
-import json
-import time
+{
+  "input_csv": "input_file.csv",
+  "output_excel": "output_step5.xlsx",
 
-# === Load configuration ===
-with open("config.json") as f:
-    config = json.load(f)
+  "columns_to_remove": [
+    "DummyColumn1", "DummyColumn2", "DummyColumn3",
+    "DummyColumn4", "DummyColumn5", "DummyColumn6",
+    "DummyColumn7", "DummyColumn8", "DummyColumn9"
+  ],
 
-input_csv = config["input_csv"]
-output_excel = config["output_excel"]
-columns_to_remove = config.get("columns_to_remove", [])
-columns_to_add = config.get("columns_to_add", [])
-parse_account = config.get("parse_account_column", True)
-account_col = config.get("account_column_name", "Account")
-resource_col = config.get("resource_column_name", "Resource ID")
-mappings = config.get("mappings", [])
+  "columns_to_add": [
+    "Description",
+    "Remediation Steps",
+    "Environment",
+    "Primary Contact",
+    "Manager / Sr Manager / Director / Sr Director",
+    "Sr Director / VP",
+    "VP / SVP / CVP",
+    "BU"
+  ],
 
-start_time = time.time()
-print("\n🚀 Starting processing using config file...")
+  "parse_account_column": true,
+  "account_column_name": "Account",
+  "resource_column_name": "Resource ID",
 
-# Step 1: Load CSV
-df = pd.read_csv(input_csv)
-print(f"✅ Loaded input file: {input_csv}")
-print("🔎 Initial columns:", df.columns.tolist())
-
-# Step 2: Extract Subscription ID and Name from 'Account'
-if parse_account and account_col in df.columns:
-    print(f"🔧 Extracting 'Subscription ID' and 'Subscription Name' from '{account_col}'")
-    df["Subscription ID"] = df[account_col].str.extract(r"^(\S+)\s*\(")[0].str.replace(r"\s+", "", regex=True)
-    df["Subscription Name"] = df[account_col].str.extract(r"\((.*?)\)")[0].str.replace(r"\s+", "", regex=True)
-else:
-    print(f"⚠️ Skipping account column parsing. '{account_col}' not found or disabled in config.")
-
-# Step 3: Clean 'Resource ID'
-if resource_col in df.columns:
-    print(f"🔧 Extracting filename from '{resource_col}'")
-    df[resource_col] = df[resource_col].apply(lambda x: str(x).split('/')[-1])
-else:
-    print(f"⚠️ Resource column '{resource_col}' not found — skipping filename extraction.")
-
-# Step 4: Drop unwanted columns
-existing_to_drop = [col for col in columns_to_remove if col in df.columns]
-df.drop(columns=existing_to_drop, inplace=True)
-print(f"🧹 Dropped columns: {existing_to_drop if existing_to_drop else 'None'}")
-
-# Step 5: Add new blank columns
-print(f"➕ Adding blank columns: {columns_to_add}")
-for col in columns_to_add:
-    df[col] = ''
-
-# Step 6: Perform mappings from external sheets
-for mapping in mappings:
-    try:
-        print(f"🔄 Performing: {mapping.get('name', 'Unnamed Mapping')}")
-        mapping_file = mapping["file"]
-        mapping_sheet = mapping["sheet"]
-        join_column = mapping["join_column"]
-        source_to_target = mapping["source_to_target"]
-
-        map_df = pd.read_excel(mapping_file, sheet_name=mapping_sheet)
-        columns_needed = [join_column] + list(source_to_target.keys())
-        df = df.merge(map_df[columns_needed], on=join_column, how="left", suffixes=('', '_map'))
-
-        for src_col, target_col in source_to_target.items():
-            df[target_col] = df[src_col].fillna(f"{target_col} not available")
-
-        df.drop(columns=list(source_to_target.keys()), inplace=True)
-        print(f"✅ {mapping['name']} complete.")
-
-    except Exception as e:
-        print(f"❌ Error in mapping '{mapping.get('name', 'Unnamed Mapping')}': {e}")
-
-# Step 7: Save result
-df.to_excel(output_excel, index=False)
-print(f"✅ Saved result to '{output_excel}' in {time.time() - start_time:.2f} seconds.")
+  "mappings": [
+    {
+      "name": "Remediation Mapping",
+      "file": "Report_Anex.xlsx",
+      "sheet": "Anex1_Remediation_Sheet",
+      "join_column": "Policy ID",
+      "source_to_target": {
+        "Policy Statement": "Description",
+        "Policy Remediation": "Remediation Steps"
+      }
+    },
+    {
+      "name": "Subscription Mapping",
+      "file": "Report_Anex.xlsx",
+      "sheet": "Anex2_Sub_Sheet",
+      "join_column": "Subscription ID",
+      "source_to_target": {
+        "Environment": "Environment",
+        "Primary Contact": "Primary Contact"
+      }
+    }
+  ]
+}
