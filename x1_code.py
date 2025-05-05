@@ -1,10 +1,26 @@
 import pandas as pd
 import time
 
-# === File Inputs ===
+# === Configurable Inputs ===
 input_csv = "input_file.csv"
 output_excel = "output_step5.xlsx"
 anex_file = "Report_Anex.xlsx"
+
+account_column_name = "Account"
+resource_column_name = "Resource ID"
+parse_account_column = True
+
+anex1_sheet = "Anex1_Remediation_Sheet"
+anex2_sheet = "Anex2_Sub_Sheet"
+anex3_sheet = "Anex3_Contact_Sheet"
+
+primary_contact_column = "Primary Contact"
+manager_columns = [
+    "Manager / Sr Manager / Director / Sr Director",
+    "Sr Director / VP",
+    "VP / SVP / CVP",
+    "BU"
+]
 
 # === Preprocessing Settings ===
 columns_to_remove = [
@@ -17,26 +33,18 @@ columns_to_add = [
     "Description",
     "Remediation Steps",
     "Environment",
-    "Primary Contact",
-    "Manager / Sr Manager / Director / Sr Director",
-    "Sr Director / VP",
-    "VP / SVP / CVP",
-    "BU"
-]
-
-parse_account_column = True
-account_column_name = "Account"
-resource_column_name = "Resource ID"
+    primary_contact_column,
+] + manager_columns
 
 validation_checks = [
     {
         "name": "Subscription ID",
-        "sheet": "Anex2_Sub_Sheet",
+        "sheet": anex2_sheet,
         "join_column": "Subscription ID"
     },
     {
         "name": "Policy ID",
-        "sheet": "Anex1_Remediation_Sheet",
+        "sheet": anex1_sheet,
         "join_column": "Policy ID"
     }
 ]
@@ -108,7 +116,7 @@ for check in validation_checks:
 # Step 7: Map Description and Remediation Steps
 print("\n🧩 Mapping 'Description' and 'Remediation Steps'")
 try:
-    df_remed = pd.read_excel(anex_file, sheet_name="Anex1_Remediation_Sheet")
+    df_remed = pd.read_excel(anex_file, sheet_name=anex1_sheet)
     df_remed["Policy ID"] = df_remed["Policy ID"].astype(str).str.strip()
 
     df = df.merge(df_remed[["Policy ID", "Policy Statement", "Policy Remediation"]],
@@ -125,15 +133,15 @@ except Exception as e:
 # Step 8: Map Environment and Primary Contact
 print("\n📌 Mapping 'Environment' and 'Primary Contact'")
 try:
-    df_env = pd.read_excel(anex_file, sheet_name="Anex2_Sub_Sheet")
+    df_env = pd.read_excel(anex_file, sheet_name=anex2_sheet)
     df_env["Subscription ID"] = df_env["Subscription ID"].astype(str).str.strip()
 
-    df.drop(columns=["Environment", "Primary Contact"], inplace=True, errors="ignore")
-    df = df.merge(df_env[["Subscription ID", "Environment", "Primary Contact"]],
+    df.drop(columns=["Environment", primary_contact_column], inplace=True, errors="ignore")
+    df = df.merge(df_env[["Subscription ID", "Environment", primary_contact_column]],
                   on="Subscription ID", how="left")
 
     df["Environment"] = df["Environment"].fillna("Environment not available")
-    df["Primary Contact"] = df["Primary Contact"].fillna("Primary contact not available")
+    df[primary_contact_column] = df[primary_contact_column].fillna("Primary contact not available")
 
     print("✅ Environment and contact data filled.")
 except Exception as e:
@@ -142,14 +150,19 @@ except Exception as e:
 # Step 9: Validate and Map Manager Hierarchy by Primary Contact
 print("\n📌 Validating and mapping Manager/VP/BU from Primary Contact")
 try:
-    df_contact = pd.read_excel(anex_file, sheet_name="Anex3_Contact_Sheet")
-    df_contact["Primary Contact"] = df_contact["Primary Contact"].astype(str).str.strip()
-    df["Primary Contact"] = df["Primary Contact"].astype(str).str.strip()
+    df_contact = pd.read_excel(anex_file, sheet_name=anex3_sheet)
+    df_contact.columns = df_contact.columns.str.strip()
+    df.columns = df.columns.str.strip()
 
-    input_contacts = set(df["Primary Contact"].dropna())
-    anex_contacts = set(df_contact["Primary Contact"].dropna())
+    df_contact[primary_contact_column] = df_contact[primary_contact_column].astype(str).str.strip()
+    df[primary_contact_column] = df[primary_contact_column].astype(str).str.strip()
+
+    input_contacts = set(df[primary_contact_column].dropna())
+    anex_contacts = set(df_contact[primary_contact_column].dropna())
 
     unmatched = sorted(input_contacts - anex_contacts)
+    matched = sorted(input_contacts & anex_contacts)
+
     if unmatched:
         with open("unmatched_primary_contact.txt", "w") as f:
             for val in unmatched:
@@ -158,20 +171,14 @@ try:
     else:
         print("✅ All Primary Contacts matched!")
 
-    df.drop(columns=[
-        "Manager / Sr Manager / Director / Sr Director",
-        "Sr Director / VP",
-        "VP / SVP / CVP",
-        "BU"
-    ], inplace=True, errors="ignore")
+    print(f"📊 Primary Contact Summary:")
+    print(f"   Total     : {len(input_contacts)}")
+    print(f"   Matched   : {len(matched)}")
+    print(f"   Unmatched : {len(unmatched)}")
+    print(f"   Match %   : {round((len(matched)/len(input_contacts))*100, 2)}%")
 
-    df = df.merge(df_contact[[
-        "Primary Contact",
-        "Manager / Sr Manager / Director / Sr Director",
-        "Sr Director / VP",
-        "VP / SVP / CVP",
-        "BU"
-    ]], on="Primary Contact", how="left")
+    df.drop(columns=manager_columns, inplace=True, errors="ignore")
+    df = df.merge(df_contact[[primary_contact_column] + manager_columns], on=primary_contact_column, how="left")
 
     print("✅ Manager hierarchy and BU data filled.")
 
