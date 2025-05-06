@@ -29,9 +29,13 @@ try:
     df['id'] = df['id'].astype(str).str.replace('/subscription/', '', regex=False)
 
     # Rename columns
-    df.rename(columns={'name': 'Subscription Name', 'id': 'Subscription ID'}, inplace=True)
+    df.rename(columns={
+        'id': 'Subscription ID',
+        'name': 'Subscription Name',
+        'PrimaryContact': 'Primary Contact'
+    }, inplace=True)
 
-    # Add columns if not present
+    # Add missing columns
     if 'Environment' not in df.columns:
         df['Environment'] = ''
     if 'BU' not in df.columns:
@@ -41,8 +45,8 @@ try:
     df['BU'] = df['Subscription Name'].astype(str).apply(
         lambda x: 'Commerce' if 'commerce' in x.lower() else '')
 
-    if 'PrimaryContact' in df.columns:
-        df.loc[df['PrimaryContact'].astype(str).str.lower() == 'test@test.com', 'BU'] = 'Alpha'
+    if 'Primary Contact' in df.columns:
+        df.loc[df['Primary Contact'].astype(str).str.lower() == 'test@test.com', 'BU'] = 'Alpha'
 
     df['BU'] = df['BU'].replace('', 'Beta')
 
@@ -59,7 +63,7 @@ try:
     # Save to Excel
     df.to_excel(output_file, index=False)
 
-    # Apply top and left alignment
+    # Apply top and left alignment using openpyxl
     wb = load_workbook(output_file)
     ws = wb.active
     align_style = Alignment(vertical='top', horizontal='left')
