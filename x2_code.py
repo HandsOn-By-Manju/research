@@ -23,9 +23,15 @@ manager_columns = [
     "BU"
 ]
 
-columns_to_remove = ["DummyColumn1", "DummyColumn2", "DummyColumn3", "DummyColumn4", "DummyColumn5", "DummyColumn6", "DummyColumn7", "DummyColumn8", "DummyColumn9"]
+columns_to_remove = [
+    "DummyColumn1", "DummyColumn2", "DummyColumn3",
+    "DummyColumn4", "DummyColumn5", "DummyColumn6",
+    "DummyColumn7", "DummyColumn8", "DummyColumn9"
+]
 
-columns_to_add = ["Description", "Remediation Steps", "Environment", primary_contact_column] + manager_columns
+columns_to_add = [
+    "Description", "Remediation Steps", "Environment", primary_contact_column
+] + manager_columns
 
 final_columns = [
     "Cloud Provider", "Subscription ID", "Subscription Name",
@@ -36,7 +42,7 @@ final_columns = [
     "VP / SVP / CVP", "BU", "Account", "Finding"
 ]
 
-# ✅ Function to validate required columns
+# === Utility ===
 def validate_required_columns(df, required_cols, source_name):
     missing = [col for col in required_cols if col not in df.columns]
     if missing:
@@ -45,84 +51,99 @@ def validate_required_columns(df, required_cols, source_name):
     else:
         print(f"✅ All required columns present in {source_name}")
 
+# === Start Processing ===
 start_time = time.time()
 print("\n🚀 Starting preprocessing and validation...")
 
-# Step 1: Load input CSV
+# Step 1: Load CSV
 df = pd.read_csv(input_csv)
 print(f"✅ Loaded input file: {input_csv}")
 
-# Step 2: Rename columns for consistency
+# Step 2: Normalize column names
 df.rename(columns={
     "Cloud provider": "Cloud Provider",
     "Policy statement": "Policy Statement",
     "Resource ID": "Affected Resource"
 }, inplace=True)
 
-# Step 3: Extract Subscription ID and Name from Account column
+# Step 3: Extract Subscription ID and Name from 'Account'
 if parse_account_column and account_column_name in df.columns:
     print(f"🔧 Extracting Subscription ID and Name from '{account_column_name}'")
     df["Subscription ID"] = df[account_column_name].str.extract(r"^(\S+)\s*\(")[0].str.replace(r"\s+", "", regex=True)
     df["Subscription Name"] = df[account_column_name].str.extract(r"\((.*?)\)")[0].str.replace(r"\s+", "", regex=True)
 
-# Step 4: Clean Affected Resource
-df[resource_column_name] = df[resource_column_name].apply(lambda x: str(x).split("/")[-1])
+# Step 4: Clean Affected Resource path
+if resource_column_name in df.columns:
+    df[resource_column_name] = df[resource_column_name].apply(lambda x: str(x).split("/")[-1])
 
-# Step 5: Drop unwanted columns
-existing_to_drop = [col for col in columns_to_remove if col in df.columns]
-df.drop(columns=existing_to_drop, inplace=True)
+# Step 5: Drop unused columns
+df.drop(columns=[col for col in columns_to_remove if col in df.columns], inplace=True)
 
-# Step 6: Add placeholder columns
+# Step 6: Add placeholder columns if missing
 for col in columns_to_add:
     if col not in df.columns:
         df[col] = ""
 
-# Step 7: Validate and map from subscription data
+# Step 7: Load and normalize Subscription Data
 df_sub = pd.read_excel(subscription_file)
+df_sub.columns = df_sub.columns.str.strip()
 validate_required_columns(df_sub, ["Subscription ID", "Environment", primary_contact_column], "Subscription File")
+
 df_sub["Subscription ID"] = df_sub["Subscription ID"].astype(str).str.strip()
 df["Subscription ID"] = df["Subscription ID"].astype(str).str.strip()
-unmatched_sub = set(df["Subscription ID"]) - set(df_sub["Subscription ID"])
-if unmatched_sub:
+
+unmatched_subs = sorted(set(df["Subscription ID"]) - set(df_sub["Subscription ID"]))
+if unmatched_subs:
     with open("unmatched_subscription_id.txt", "w") as f:
-        for id in unmatched_sub:
-            f.write(f"{id}\n")
+        f.writelines(f"{id}\n" for id in unmatched_subs)
+    print(f"❌ {len(unmatched_subs)} unmatched Subscription ID entries logged.")
+else:
+    print("✅ All Subscription IDs matched.")
 
 df = df.merge(df_sub[["Subscription ID", "Environment", primary_contact_column]], on="Subscription ID", how="left")
 df["Environment"] = df["Environment"].fillna("Environment not available")
 df[primary_contact_column] = df[primary_contact_column].fillna("Primary contact not available")
 
-# Step 8: Validate and map from remediation data
+# Step 8: Load and normalize Remediation Data
 df_remed = pd.read_excel(remediation_file)
+df_remed.columns = df_remed.columns.str.strip()
 validate_required_columns(df_remed, ["Policy ID", "Policy Statement", "Policy Remediation"], "Remediation File")
+
 df_remed["Policy ID"] = df_remed["Policy ID"].astype(str).str.strip()
 df["Policy ID"] = df["Policy ID"].astype(str).str.strip()
-unmatched_pol = set(df["Policy ID"]) - set(df_remed["Policy ID"])
-if unmatched_pol:
+
+unmatched_policies = sorted(set(df["Policy ID"]) - set(df_remed["Policy ID"]))
+if unmatched_policies:
     with open("unmatched_policy_id.txt", "w") as f:
-        for id in unmatched_pol:
-            f.write(f"{id}\n")
+        f.writelines(f"{id}\n" for id in unmatched_policies)
+    print(f"❌ {len(unmatched_policies)} unmatched Policy ID entries logged.")
+else:
+    print("✅ All Policy IDs matched.")
 
 df = df.merge(df_remed[["Policy ID", "Policy Statement", "Policy Remediation"]], on="Policy ID", how="left")
 df["Description"] = df["Policy Statement"].fillna("Policy details not available")
 df["Remediation Steps"] = df["Policy Remediation"].fillna("Remediation steps not available")
 df.drop(columns=["Policy Statement", "Policy Remediation"], inplace=True, errors="ignore")
 
-# Step 9: Validate and map from ownership data
+# Step 9: Load and normalize Ownership Data
 df_contact = pd.read_excel(ownership_file)
+df_contact.columns = df_contact.columns.str.strip()
 validate_required_columns(df_contact, [primary_contact_column] + manager_columns, "Ownership File")
+
 df = df.merge(df_contact[[primary_contact_column] + manager_columns], on=primary_contact_column, how="left")
+print("✅ Mapped Manager Hierarchy and BU.")
 
 # Step 10: Reorder columns
-ordered_columns = [col for col in final_columns if col in df.columns]
-df = df[ordered_columns + [col for col in df.columns if col not in ordered_columns]]
+ordered = [col for col in final_columns if col in df.columns]
+df = df[ordered + [col for col in df.columns if col not in ordered]]
 
 # Step 11: Save to Excel with formatting
+print("\n💾 Saving Excel file with formatting...")
 df.to_excel(output_excel, index=False)
+
 wb = load_workbook(output_excel)
 ws = wb.active
 
-# Formatting
 align = Alignment(horizontal="left", vertical="top", wrap_text=True)
 header_fill = PatternFill(start_color="B7DEE8", end_color="B7DEE8", fill_type="solid")
 header_font = Font(bold=True)
@@ -130,14 +151,16 @@ header_font = Font(bold=True)
 for row in ws.iter_rows():
     for cell in row:
         cell.alignment = align
+
 for cell in ws[1]:
     cell.fill = header_fill
     cell.font = header_font
+
 ws.freeze_panes = "A2"
 for col in ws.columns:
     max_len = max(len(str(cell.value)) if cell.value else 0 for cell in col)
     ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 60)
 
 wb.save(output_excel)
-print(f"✅ Final Excel saved: {output_excel}")
+print(f"✅ Final file saved as: {output_excel}")
 print(f"⏱️ Total time: {time.time() - start_time:.2f} seconds")
