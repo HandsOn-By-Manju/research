@@ -92,6 +92,9 @@ validate_required_columns(df_sub, ["Subscription ID", "Environment", primary_con
 df_sub["Subscription ID"] = df_sub["Subscription ID"].astype(str).str.strip()
 df["Subscription ID"] = df["Subscription ID"].astype(str).str.strip()
 
+# Drop columns from df that would conflict on merge
+df.drop(columns=[col for col in df_sub.columns if col in df.columns and col != "Subscription ID"], inplace=True, errors="ignore")
+
 unmatched_subs = sorted(set(df["Subscription ID"]) - set(df_sub["Subscription ID"]))
 if unmatched_subs:
     with open("unmatched_subscription_id.txt", "w") as f:
@@ -112,6 +115,9 @@ validate_required_columns(df_remed, ["Policy ID", "Policy Statement", "Policy Re
 df_remed["Policy ID"] = df_remed["Policy ID"].astype(str).str.strip()
 df["Policy ID"] = df["Policy ID"].astype(str).str.strip()
 
+# Drop conflicting columns before merge
+df.drop(columns=[col for col in df_remed.columns if col in df.columns and col != "Policy ID"], inplace=True, errors="ignore")
+
 unmatched_policies = sorted(set(df["Policy ID"]) - set(df_remed["Policy ID"]))
 if unmatched_policies:
     with open("unmatched_policy_id.txt", "w") as f:
@@ -129,6 +135,9 @@ df.drop(columns=["Policy Statement", "Policy Remediation"], inplace=True, errors
 df_contact = pd.read_excel(ownership_file)
 df_contact.columns = df_contact.columns.str.strip()
 validate_required_columns(df_contact, [primary_contact_column] + manager_columns, "Ownership File")
+
+# Drop conflicting columns before merge
+df.drop(columns=[col for col in df_contact.columns if col in df.columns and col != primary_contact_column], inplace=True, errors="ignore")
 
 df = df.merge(df_contact[[primary_contact_column] + manager_columns], on=primary_contact_column, how="left")
 print("✅ Mapped Manager Hierarchy and BU.")
