@@ -25,31 +25,41 @@ try:
     if missing_cols:
         raise KeyError(f"Missing required column(s): {', '.join(missing_cols)}")
 
-    # Remove '/subscription/' prefix from 'id' column
+    # Remove '/subscription/' prefix from 'id'
     df['id'] = df['id'].astype(str).str.replace('/subscription/', '', regex=False)
 
     # Rename columns
     df.rename(columns={'name': 'Subscription Name', 'id': 'Subscription ID'}, inplace=True)
 
-    # Add new columns
-    df['Environment'] = ''
-    df['BU'] = ''
+    # Add columns if not present
+    if 'Environment' not in df.columns:
+        df['Environment'] = ''
+    if 'BU' not in df.columns:
+        df['BU'] = ''
 
-    # Step 1: Set 'BU' to 'Commerce' if 'Subscription Name' contains 'commerce' (case-insensitive)
+    # Assign BU values
     df['BU'] = df['Subscription Name'].astype(str).apply(
         lambda x: 'Commerce' if 'commerce' in x.lower() else '')
 
-    # Step 2: Override with 'Alpha' if 'PrimaryContact' is 'test@test.com'
     if 'PrimaryContact' in df.columns:
         df.loc[df['PrimaryContact'].astype(str).str.lower() == 'test@test.com', 'BU'] = 'Alpha'
 
-    # Step 3: Set remaining empty BU cells to 'Beta'
     df['BU'] = df['BU'].replace('', 'Beta')
+
+    # Assign Environment values
+    if 'ManagementGroup' in df.columns:
+        df['Environment'] = df['ManagementGroup'].astype(str).apply(
+            lambda x: 'Production' if x.startswith('Prod-') else
+                      'Non-Production' if x.startswith('Non-Prod-') else
+                      'Development' if x.startswith('Dev-') else 'Production'
+        )
+    else:
+        df['Environment'] = 'Production'
 
     # Save to Excel
     df.to_excel(output_file, index=False)
 
-    # Apply top and left alignment using openpyxl
+    # Apply top and left alignment
     wb = load_workbook(output_file)
     ws = wb.active
     align_style = Alignment(vertical='top', horizontal='left')
