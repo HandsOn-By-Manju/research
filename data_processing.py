@@ -35,13 +35,16 @@ try:
     df['Environment'] = ''
     df['BU'] = ''
 
-    # Set BU = 'Commerce' if 'Subscription Name' contains 'commerce' (case-insensitive)
+    # Step 1: Set 'BU' to 'Commerce' if 'Subscription Name' contains 'commerce' (case-insensitive)
     df['BU'] = df['Subscription Name'].astype(str).apply(
         lambda x: 'Commerce' if 'commerce' in x.lower() else '')
 
-    # Override BU = 'Alpha' if 'PrimaryContact' is 'test@test.com' (case-insensitive)
+    # Step 2: Override with 'Alpha' if 'PrimaryContact' is 'test@test.com'
     if 'PrimaryContact' in df.columns:
         df.loc[df['PrimaryContact'].astype(str).str.lower() == 'test@test.com', 'BU'] = 'Alpha'
+
+    # Step 3: Set remaining empty BU cells to 'Beta'
+    df['BU'] = df['BU'].replace('', 'Beta')
 
     # Save to Excel
     df.to_excel(output_file, index=False)
