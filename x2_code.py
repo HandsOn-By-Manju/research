@@ -70,6 +70,7 @@ df = pd.read_csv(input_csv)
 print(f"✅ Loaded input file: {input_csv}")
 
 # Step 2: Normalize known columns
+df.columns = df.columns.str.strip()
 df.rename(columns={
     "Cloud provider": "Cloud Provider",
     "Policy statement": "Policy Statement",
@@ -130,9 +131,11 @@ if unmatched_policies:
 else:
     print("✅ All Policy IDs matched.")
 
-df = df.merge(df_remed[["Policy ID", "Policy Statement", "Policy Remediation"]], on="Policy ID", how="left")
-df["Description"] = df["Policy Statement"].fillna("Policy details not available")
-df["Remediation Steps"] = df["Policy Remediation"].fillna("Remediation steps not available")
+# Merge safely
+df_remed = df_remed[["Policy ID", "Policy Statement", "Policy Remediation"]]
+df = df.merge(df_remed, on="Policy ID", how="left")
+df["Description"] = df.get("Policy Statement", "Policy details not available")
+df["Remediation Steps"] = df.get("Policy Remediation", "Remediation steps not available")
 
 # Step 9: Contact Hierarchy mapping
 df_contact = pd.read_excel(ownership_file)
