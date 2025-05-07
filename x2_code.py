@@ -42,7 +42,7 @@ final_columns = [
     "VP / SVP / CVP", "BU", "Account", "Finding"
 ]
 
-# === Utility ===
+# === Utility Functions ===
 def validate_required_columns(df, required_cols, source_name):
     missing = [col for col in required_cols if col not in df.columns]
     if missing:
@@ -51,7 +51,17 @@ def validate_required_columns(df, required_cols, source_name):
     else:
         print(f"✅ All required columns present in {source_name}")
 
-# === Start Processing ===
+def format_duration(seconds):
+    mins, secs = divmod(seconds, 60)
+    hrs, mins = divmod(mins, 60)
+    if hrs:
+        return f"{int(hrs)}h {int(mins)}m {secs:.2f}s"
+    elif mins:
+        return f"{int(mins)}m {secs:.2f}s"
+    else:
+        return f"{secs:.2f}s"
+
+# === Start Script ===
 start_time = time.time()
 print("\n🚀 Starting preprocessing and validation...")
 
@@ -59,41 +69,38 @@ print("\n🚀 Starting preprocessing and validation...")
 df = pd.read_csv(input_csv)
 print(f"✅ Loaded input file: {input_csv}")
 
-# Step 2: Normalize column names
+# Step 2: Normalize known columns
 df.rename(columns={
     "Cloud provider": "Cloud Provider",
     "Policy statement": "Policy Statement",
     "Resource ID": "Affected Resource"
 }, inplace=True)
 
-# Step 3: Extract Subscription ID and Name from 'Account'
+# Step 3: Parse Account for Subscription ID & Name
 if parse_account_column and account_column_name in df.columns:
     print(f"🔧 Extracting Subscription ID and Name from '{account_column_name}'")
     df["Subscription ID"] = df[account_column_name].str.extract(r"^(\S+)\s*\(")[0].str.replace(r"\s+", "", regex=True)
     df["Subscription Name"] = df[account_column_name].str.extract(r"\((.*?)\)")[0].str.replace(r"\s+", "", regex=True)
 
-# Step 4: Clean Affected Resource path
+# Step 4: Clean Affected Resource filename
 if resource_column_name in df.columns:
     df[resource_column_name] = df[resource_column_name].apply(lambda x: str(x).split("/")[-1])
 
-# Step 5: Drop unused columns
+# Step 5: Drop unwanted columns
 df.drop(columns=[col for col in columns_to_remove if col in df.columns], inplace=True)
 
-# Step 6: Add placeholder columns if missing
+# Step 6: Add required empty columns if missing
 for col in columns_to_add:
     if col not in df.columns:
         df[col] = ""
 
-# Step 7: Load and normalize Subscription Data
+# Step 7: Subscription mapping
 df_sub = pd.read_excel(subscription_file)
 df_sub.columns = df_sub.columns.str.strip()
 validate_required_columns(df_sub, ["Subscription ID", "Environment", primary_contact_column], "Subscription File")
-
 df_sub["Subscription ID"] = df_sub["Subscription ID"].astype(str).str.strip()
 df["Subscription ID"] = df["Subscription ID"].astype(str).str.strip()
-
-# Drop columns from df that would conflict on merge
-df.drop(columns=[col for col in df_sub.columns if col in df.columns and col != "Subscription ID"], inplace=True, errors="ignore")
+df.drop(columns=[col for col in df_sub.columns if col in df.columns and col not in ["Subscription ID", "Subscription Name"]], inplace=True, errors="ignore")
 
 unmatched_subs = sorted(set(df["Subscription ID"]) - set(df_sub["Subscription ID"]))
 if unmatched_subs:
@@ -107,16 +114,13 @@ df = df.merge(df_sub[["Subscription ID", "Environment", primary_contact_column]]
 df["Environment"] = df["Environment"].fillna("Environment not available")
 df[primary_contact_column] = df[primary_contact_column].fillna("Primary contact not available")
 
-# Step 8: Load and normalize Remediation Data
+# Step 8: Remediation mapping
 df_remed = pd.read_excel(remediation_file)
 df_remed.columns = df_remed.columns.str.strip()
 validate_required_columns(df_remed, ["Policy ID", "Policy Statement", "Policy Remediation"], "Remediation File")
-
 df_remed["Policy ID"] = df_remed["Policy ID"].astype(str).str.strip()
 df["Policy ID"] = df["Policy ID"].astype(str).str.strip()
-
-# Drop conflicting columns before merge
-df.drop(columns=[col for col in df_remed.columns if col in df.columns and col != "Policy ID"], inplace=True, errors="ignore")
+df.drop(columns=[col for col in df_remed.columns if col in df.columns and col not in ["Policy ID", "Policy Statement"]], inplace=True, errors="ignore")
 
 unmatched_policies = sorted(set(df["Policy ID"]) - set(df_remed["Policy ID"]))
 if unmatched_policies:
@@ -129,16 +133,12 @@ else:
 df = df.merge(df_remed[["Policy ID", "Policy Statement", "Policy Remediation"]], on="Policy ID", how="left")
 df["Description"] = df["Policy Statement"].fillna("Policy details not available")
 df["Remediation Steps"] = df["Policy Remediation"].fillna("Remediation steps not available")
-df.drop(columns=["Policy Statement", "Policy Remediation"], inplace=True, errors="ignore")
 
-# Step 9: Load and normalize Ownership Data
+# Step 9: Contact Hierarchy mapping
 df_contact = pd.read_excel(ownership_file)
 df_contact.columns = df_contact.columns.str.strip()
 validate_required_columns(df_contact, [primary_contact_column] + manager_columns, "Ownership File")
-
-# Drop conflicting columns before merge
 df.drop(columns=[col for col in df_contact.columns if col in df.columns and col != primary_contact_column], inplace=True, errors="ignore")
-
 df = df.merge(df_contact[[primary_contact_column] + manager_columns], on=primary_contact_column, how="left")
 print("✅ Mapped Manager Hierarchy and BU.")
 
@@ -146,7 +146,7 @@ print("✅ Mapped Manager Hierarchy and BU.")
 ordered = [col for col in final_columns if col in df.columns]
 df = df[ordered + [col for col in df.columns if col not in ordered]]
 
-# Step 11: Save to Excel with formatting
+# Step 11: Write to Excel with formatting
 print("\n💾 Saving Excel file with formatting...")
 df.to_excel(output_excel, index=False)
 
@@ -172,4 +172,7 @@ for col in ws.columns:
 
 wb.save(output_excel)
 print(f"✅ Final file saved as: {output_excel}")
-print(f"⏱️ Total time: {time.time() - start_time:.2f} seconds")
+
+# Final execution time
+total_time = time.time() - start_time
+print(f"⏱️ Total time: {format_duration(total_time)}")
