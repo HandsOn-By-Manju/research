@@ -6,7 +6,6 @@ from openpyxl.styles import Alignment, Font, PatternFill
 # === Configurable Inputs ===
 input_csv = "input_file.csv"
 output_excel = "output_step5.xlsx"
-
 remediation_file = "Remediation_Master_Sheet.xlsx"
 subscription_file = "Sub_Data_file.xlsx"
 ownership_file = "Ownership.xlsx"
@@ -23,7 +22,7 @@ manager_columns = [
     "BU"
 ]
 
-# 🔧 Columns to be removed (explicitly specify column names)
+# 🔧 Columns to be removed (customize below)
 columns_to_remove = [
     "Debug Column", "Unused Info", "Temp Notes"  # Replace or expand as needed
 ]
@@ -93,7 +92,12 @@ for col in columns_to_add:
 # Step 6: Merge Environment and Primary Contact from Subscription File
 df_sub = pd.read_excel(subscription_file)
 df_sub.columns = df_sub.columns.str.strip()
-validate_required_columns(df_sub, ["Subscription ID", "Environment", primary_contact_column], "Subscription File")
+validate_required_columns(df_sub, ["Subscription ID"], "Subscription File")
+
+# Ensure required columns exist
+for col in ["Environment", primary_contact_column]:
+    if col not in df_sub.columns:
+        df_sub[col] = None
 
 df["Subscription ID"] = df["Subscription ID"].astype(str).str.strip()
 df_sub["Subscription ID"] = df_sub["Subscription ID"].astype(str).str.strip()
@@ -107,8 +111,10 @@ else:
     print("✅ All Subscription IDs matched.")
 
 df = df.merge(df_sub[["Subscription ID", "Environment", primary_contact_column]], on="Subscription ID", how="left")
-df["Environment"].fillna("Environment not available", inplace=True)
-df[primary_contact_column].fillna("Primary contact not available", inplace=True)
+if "Environment" in df.columns:
+    df["Environment"] = df["Environment"].fillna("Environment not available")
+if primary_contact_column in df.columns:
+    df[primary_contact_column] = df[primary_contact_column].fillna("Primary contact not available")
 
 # Step 7: Merge Description, Policy Statement, and Policy Remediation
 df_remed = pd.read_excel(remediation_file)
