@@ -6,6 +6,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 # === Configurable Inputs ===
 input_csv = "input_file.csv"
 output_excel = "output_step5.xlsx"
+
 remediation_file = "Remediation_Master_Sheet.xlsx"
 subscription_file = "Sub_Data_file.xlsx"
 ownership_file = "Ownership.xlsx"
@@ -94,9 +95,10 @@ df_sub = pd.read_excel(subscription_file)
 df_sub.columns = df_sub.columns.str.strip()
 validate_required_columns(df_sub, ["Subscription ID"], "Subscription File")
 
-# Ensure required columns exist
+# Ensure required columns exist before merging
 for col in ["Environment", primary_contact_column]:
     if col not in df_sub.columns:
+        print(f"⚠️ Column '{col}' missing in Subscription File. Adding empty column.")
         df_sub[col] = None
 
 df["Subscription ID"] = df["Subscription ID"].astype(str).str.strip()
