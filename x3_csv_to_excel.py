@@ -6,13 +6,13 @@ start_time = time.time()
 
 # File paths
 input_file_path = "input_file.csv"
-remediation_file_path = "remediation_file.csv"
+remediation_file_path = "remediation_file.xlsx"  # <-- Excel file
 output_excel_path = "output_file.xlsx"
 unmatched_policy_log_path = "unmatched_policy_ids.txt"
 
-# Read input and remediation files
+# Read input CSV and remediation Excel
 df = pd.read_csv(input_file_path)
-remediation_df = pd.read_csv(remediation_file_path)
+remediation_df = pd.read_excel(remediation_file_path)
 
 # Step 1: Rename 'Policy statement' to 'Description' in input
 if 'Policy statement' in df.columns:
@@ -56,21 +56,20 @@ if 'Policy ID' in df.columns and 'Policy ID' in remediation_df.columns:
     else:
         print("✅ All Policy IDs matched with remediation file.")
 
-    # Proceed with merging
+    # Merge relevant remediation columns
     remediation_subset = remediation_df[['Policy ID', 'Policy Statement', 'Policy Remediation']]
     df = df.merge(remediation_subset, on='Policy ID', how='left')
 
 else:
     print("❌ 'Policy ID' column missing in input or remediation file.")
 
-# Save the result to Excel
+# Step 5: Save the result to Excel
 df.to_excel(output_excel_path, index=False)
 
-# End timer
+# Execution time tracking
 end_time = time.time()
 elapsed = end_time - start_time
 
-# Display execution time
 if elapsed < 60:
     print(f"\n⏱️ Execution Time: {elapsed:.2f} seconds")
 elif elapsed < 3600:
