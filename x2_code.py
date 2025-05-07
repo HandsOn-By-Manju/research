@@ -139,7 +139,15 @@ df = df.merge(df_remed[["Policy ID", "Description", "Policy Statement", "Policy 
 # Step 8: Merge Contact Hierarchy based on Primary Contact
 df_contact = pd.read_excel(ownership_file)
 df_contact.columns = df_contact.columns.str.strip()
-validate_required_columns(df_contact, [primary_contact_column] + manager_columns, "Ownership File")
+
+for col in [primary_contact_column] + manager_columns:
+    if col not in df_contact.columns:
+        print(f"⚠️ Column '{col}' missing in Ownership File. Adding empty column.")
+        df_contact[col] = None
+
+if primary_contact_column not in df.columns:
+    print(f"⚠️ Column '{primary_contact_column}' missing in Input File. Adding empty column.")
+    df[primary_contact_column] = None
 
 df = df.merge(df_contact[[primary_contact_column] + manager_columns], on=primary_contact_column, how="left")
 print("✅ Mapped Manager Hierarchy and BU.")
