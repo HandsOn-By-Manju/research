@@ -115,24 +115,29 @@ if 'Primary Contact' in df.columns and 'Primary Contact' in ownership_df.columns
     print("✅ Merged ownership hierarchy columns.")
 
 # Step 7: Remove unwanted columns
-columns_to_remove = ['Column1', 'Column2', 'Column3']  # ⬅️ Replace with actual columns to remove
+columns_to_remove = ['Column1', 'Column2', 'Column3']  # Replace with actual column names
 print(f"🧽 Dropping columns if present: {columns_to_remove}")
 existing_columns_to_remove = [col for col in columns_to_remove if col in df.columns]
 df.drop(columns=existing_columns_to_remove, inplace=True)
 print(f"✅ Dropped columns: {existing_columns_to_remove}")
 
-# Final column list
+# Step 8: Rename columns
+df.rename(columns={
+    'Cloud provider': 'Cloud Provider',
+    'Environment_y': 'Environment'
+}, inplace=True)
+print("🔤 Renamed columns: 'Cloud provider' → 'Cloud Provider', 'Environment_y' → 'Environment'")
+
+# Final columns
 print(f"\n📋 Final columns in the Excel file:\n{list(df.columns)}")
 
-# Step 8: Save Excel output
+# Step 9: Save Excel
 df.to_excel(output_excel_path, index=False)
 print(f"💾 Saved final Excel file to: {output_excel_path}")
 
-# Timer
+# Execution time
 end_time = time.time()
 elapsed = end_time - start_time
-
-# Execution time
 if elapsed < 60:
     print(f"\n⏱️ Execution Time: {elapsed:.2f} seconds")
 elif elapsed < 3600:
