@@ -121,7 +121,7 @@ df_remed.columns = df_remed.columns.str.strip()
 validate_required_columns(df_remed, ["Policy ID", "Policy Statement", "Policy Remediation"], "Remediation File")
 df_remed["Policy ID"] = df_remed["Policy ID"].astype(str).str.strip()
 df["Policy ID"] = df["Policy ID"].astype(str).str.strip()
-df.drop(columns=[col for col in df_remed.columns if col in df.columns and col not in ["Policy ID", "Policy Statement"]], inplace=True, errors="ignore")
+df.drop(columns=["Policy Statement", "Policy Remediation"], inplace=True, errors="ignore")
 
 unmatched_policies = sorted(set(df["Policy ID"]) - set(df_remed["Policy ID"]))
 if unmatched_policies:
@@ -131,11 +131,9 @@ if unmatched_policies:
 else:
     print("✅ All Policy IDs matched.")
 
-# Merge safely
-df_remed = df_remed[["Policy ID", "Policy Statement", "Policy Remediation"]]
-df = df.merge(df_remed, on="Policy ID", how="left")
-df["Description"] = df.get("Policy Statement", "Policy details not available")
-df["Remediation Steps"] = df.get("Policy Remediation", "Remediation steps not available")
+df = df.merge(df_remed[["Policy ID", "Policy Statement", "Policy Remediation"]], on="Policy ID", how="left")
+df["Description"] = df["Policy Statement"].fillna("Policy details not available")
+df["Remediation Steps"] = df["Policy Remediation"].fillna("Remediation steps not available")
 
 # Step 9: Contact Hierarchy mapping
 df_contact = pd.read_excel(ownership_file)
@@ -179,3 +177,10 @@ print(f"✅ Final file saved as: {output_excel}")
 # Final execution time
 total_time = time.time() - start_time
 print(f"⏱️ Total time: {format_duration(total_time)}")
+
+# Final validation of required columns
+missing_final = [col for col in final_columns if col not in df.columns]
+if missing_final:
+    print(f"❌ Final output is missing columns: {missing_final}")
+else:
+    print("✅ Final output contains all required columns.")
