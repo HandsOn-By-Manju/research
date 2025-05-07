@@ -6,6 +6,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 # === Configurable Inputs ===
 input_csv = "input_file.csv"
 output_excel = "output_step5.xlsx"
+
 remediation_file = "Remediation_Master_Sheet.xlsx"
 subscription_file = "Sub_Data_file.xlsx"
 ownership_file = "Ownership.xlsx"
@@ -22,7 +23,10 @@ manager_columns = [
     "BU"
 ]
 
-columns_to_remove = [f"DummyColumn{i}" for i in range(1, 10)]
+# 🔧 Columns to be removed (explicitly specify column names)
+columns_to_remove = [
+    "Debug Column", "Unused Info", "Temp Notes"  # Replace or expand as needed
+]
 
 columns_to_add = [
     "Description", "Policy Statement", "Policy Remediation",
@@ -78,7 +82,7 @@ if parse_account_column and account_column_name in df.columns:
 if resource_column_name in df.columns:
     df[resource_column_name] = df[resource_column_name].apply(lambda x: str(x).split("/")[-1])
 
-# Step 4: Drop unwanted dummy columns
+# Step 4: Drop unwanted columns
 df.drop(columns=[col for col in columns_to_remove if col in df.columns], inplace=True)
 
 # Step 5: Add any missing expected columns
