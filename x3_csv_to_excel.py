@@ -6,13 +6,15 @@ start_time = time.time()
 
 # File paths
 input_file_path = "input_file.csv"
-remediation_file_path = "remediation_file.xlsx"  # <-- Excel file
+remediation_file_path = "remediation_file.xlsx"
+subscription_details_path = "subscription_details.xlsx"
 output_excel_path = "output_file.xlsx"
 unmatched_policy_log_path = "unmatched_policy_ids.txt"
 
-# Read input CSV and remediation Excel
+# Load files
 df = pd.read_csv(input_file_path)
 remediation_df = pd.read_excel(remediation_file_path)
+subscription_df = pd.read_excel(subscription_details_path)
 
 # Step 1: Rename 'Policy statement' to 'Description' in input
 if 'Policy statement' in df.columns:
@@ -34,17 +36,16 @@ if 'Account' in df.columns:
     ]
     df = df[desired_order]
 
-# Step 3: Process 'Resource ID' column
+# Step 3: Clean 'Resource ID'
 if 'Resource ID' in df.columns:
     df['Resource ID'] = df['Resource ID'].astype(str).apply(
         lambda x: x.rstrip('/').rsplit('/', 1)[-1] if '/' in x.rstrip('/') else x
     )
 
-# Step 4: Validate Policy ID matches before merging
+# Step 4: Validate unmatched Policy IDs and merge remediation
 if 'Policy ID' in df.columns and 'Policy ID' in remediation_df.columns:
     input_policy_ids = set(df['Policy ID'].dropna().unique())
     remediation_policy_ids = set(remediation_df['Policy ID'].dropna().unique())
-
     unmatched_ids = sorted(list(input_policy_ids - remediation_policy_ids))
 
     if unmatched_ids:
@@ -56,20 +57,24 @@ if 'Policy ID' in df.columns and 'Policy ID' in remediation_df.columns:
     else:
         print("✅ All Policy IDs matched with remediation file.")
 
-    # Merge relevant remediation columns
     remediation_subset = remediation_df[['Policy ID', 'Policy Statement', 'Policy Remediation']]
     df = df.merge(remediation_subset, on='Policy ID', how='left')
 
+# Step 5: Merge Subscription Details by 'Subscription ID'
+if 'Subscription ID' in df.columns and 'Subscription ID' in subscription_df.columns:
+    subscription_subset = subscription_df[['Subscription ID', 'Environment', 'BU']]
+    df = df.merge(subscription_subset, on='Subscription ID', how='left')
 else:
-    print("❌ 'Policy ID' column missing in input or remediation file.")
+    print("❌ 'Subscription ID' column missing in input or subscription details file.")
 
-# Step 5: Save the result to Excel
+# Step 6: Save final result to Excel
 df.to_excel(output_excel_path, index=False)
 
-# Execution time tracking
+# Timer
 end_time = time.time()
 elapsed = end_time - start_time
 
+# Show execution time
 if elapsed < 60:
     print(f"\n⏱️ Execution Time: {elapsed:.2f} seconds")
 elif elapsed < 3600:
@@ -80,6 +85,7 @@ else:
     seconds = elapsed % 60
     print(f"\n⏱️ Execution Time: {hours} hours {minutes} minutes {seconds:.2f} seconds")
 
+# Completion messages
 print(f"✅ Final Excel file saved to: {output_excel_path}")
 if unmatched_ids:
     print(f"📄 Unmatched Policy IDs logged to: {unmatched_policy_log_path}")
