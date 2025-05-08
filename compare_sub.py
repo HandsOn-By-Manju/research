@@ -4,45 +4,44 @@ import pandas as pd
 csv_file = 'file1.csv'
 excel_file = 'file2.xlsx'
 
-# Read files
+# Read the files
 df_csv = pd.read_csv(csv_file)
 df_excel = pd.read_excel(excel_file)
 
-# Normalize column names to lowercase
-df_csv.columns = df_csv.columns.str.lower()
-df_excel.columns = df_excel.columns.str.lower()
+# Helper to find actual column name ignoring case
+def find_column(df, target):
+    return next((col for col in df.columns if col.strip().lower() == target.lower()), None)
 
-# Define the lowercase version of the column to look for
-subscription_column = 'subscription id'
+# Locate column names case-insensitively
+csv_col = find_column(df_csv, 'Subscription ID')
+excel_col = find_column(df_excel, 'Subscription ID')
 
-# Check if column exists in both
-if subscription_column in df_csv.columns and subscription_column in df_excel.columns:
-    # Normalize Subscription ID values
-    df_csv[subscription_column] = df_csv[subscription_column].astype(str).str.strip()
-    df_excel[subscription_column] = df_excel[subscription_column].astype(str).str.strip()
+# Validate both columns exist
+if csv_col and excel_col:
+    # Clean and normalize values
+    df_csv[csv_col] = df_csv[csv_col].astype(str).str.strip()
+    df_excel[excel_col] = df_excel[excel_col].astype(str).str.strip()
 
-    # Extract unique IDs
-    ids_csv = set(df_csv[subscription_column])
-    ids_excel = set(df_excel[subscription_column])
+    # Create ID sets
+    ids_csv = set(df_csv[csv_col])
+    ids_excel = set(df_excel[excel_col])
 
-    # Find matches and differences
+    # Compare
     common_ids = ids_csv & ids_excel
     only_in_csv = ids_csv - ids_excel
     only_in_excel = ids_excel - ids_csv
 
-    # Filter rows
-    df_common = df_csv[df_csv[subscription_column].isin(common_ids)]
-    df_only_in_csv = df_csv[df_csv[subscription_column].isin(only_in_csv)]
-    df_only_in_excel = df_excel[df_excel[subscription_column].isin(only_in_excel)]
+    # Filter DataFrames
+    df_common = df_csv[df_csv[csv_col].isin(common_ids)]
+    df_only_csv = df_csv[df_csv[csv_col].isin(only_in_csv)]
+    df_only_excel = df_excel[df_excel[excel_col].isin(only_in_excel)]
 
-    # Save results
+    # Save output
     df_common.to_excel('matched_subscriptions.xlsx', index=False)
-    df_only_in_csv.to_excel('only_in_csv.xlsx', index=False)
-    df_only_in_excel.to_excel('only_in_excel.xlsx', index=False)
+    df_only_csv.to_excel('only_in_csv.xlsx', index=False)
+    df_only_excel.to_excel('only_in_excel.xlsx', index=False)
 
-    # Console output
-    print(f"✅ Total Common IDs: {len(common_ids)}")
-    print(f"✅ Only in CSV: {len(only_in_csv)}")
-    print(f"✅ Only in Excel: {len(only_in_excel)}")
+    # Output summary
+    print(f"✅ Common: {len(common_ids)} | Only in CSV: {len(only_in_csv)} | Only in Excel: {len(only_in_excel)}")
 else:
-    print("❌ 'Subscription ID' column not found in one or both files (case-insensitive match failed).")
+    print("❌ 'Subscription ID' column not found in one or both files.")
