@@ -1,0 +1,1 @@
+=AND(ISNUMBER(FIND("Unsupported", A1)), ISNUMBER(FIND("OS", A1)))
