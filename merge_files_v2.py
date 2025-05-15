@@ -23,7 +23,7 @@ log_lines.append(f"Number of Excel files found: {len(excel_files)}")
 
 if len(excel_files) == 0:
     log_lines.append("No Excel files found.")
-    with open(log_file, 'w') as f:
+    with open(log_file, 'w', encoding='utf-8') as f:
         f.write('\n'.join(log_lines))
     print("❌ No Excel files found in current folder.")
     exit()
@@ -44,7 +44,7 @@ for file in excel_files:
     if list(df.columns) != expected_columns:
         log_lines.append(f"❌ Column mismatch in file: {file}")
         log_lines.append(f"Found columns: {list(df.columns)}")
-        with open(log_file, 'w') as f:
+        with open(log_file, 'w', encoding='utf-8') as f:
             f.write('\n'.join(log_lines))
         print(f"❌ Column mismatch found in '{file}'. Check merge_log.txt for details.")
         exit()
@@ -78,14 +78,14 @@ ws.auto_filter.ref = ws.dimensions
 ws.freeze_panes = "A2"
 wb.save(output_path)
 
-# === STEP 5: Write Log File ===
+# === STEP 5: Write Log File (UTF-8 Encoding) ===
 log_lines.append("\nRow counts per file:")
 for file, count in row_counts.items():
     log_lines.append(f"{file}: {count} rows")
 
 log_lines.append(f"\nTotal rows in merged file: {len(merged_df)}")
 
-with open(log_file, "w") as f:
+with open(log_file, "w", encoding="utf-8") as f:
     f.write("\n".join(log_lines))
 
 # === DONE ===
