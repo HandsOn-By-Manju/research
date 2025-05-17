@@ -1,0 +1,1 @@
+az keyvault list --subscription "<your-subscription-id>" --query "[].{Name:name, ResourceGroup:resourceGroup, Location:location}" -o table
