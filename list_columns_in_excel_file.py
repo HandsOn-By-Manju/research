@@ -15,8 +15,8 @@ try:
 
     # Print all column names
     print("[INFO] Listing all column names:")
-    for index, col in enumerate(df.columns, start=1):
-        print(f"{index}. {col}")
+    for col in df.columns:
+        print(f"- {col}")
 
 except FileNotFoundError:
     print(f"[ERROR] File not found at path: {file_path}")
