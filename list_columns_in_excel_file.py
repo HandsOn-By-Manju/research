@@ -1,22 +1,25 @@
 import pandas as pd
 
-# Path to your Excel file
 file_path = 'sample.xlsx'
 
 print("[INFO] Starting the process to read Excel file...")
 
 try:
-    # Load the Excel file
-    print(f"[INFO] Reading the Excel file from: {file_path}")
-    df = pd.read_excel(file_path)
+    # Load all sheet names
+    xls = pd.ExcelFile(file_path)
+    sheet_names = xls.sheet_names
+    print(f"[INFO] Sheets found in the Excel file: {sheet_names}\n")
 
-    # Display total number of columns
-    print(f"[SUCCESS] Excel file loaded successfully. Total columns found: {len(df.columns)}\n")
+    # Loop through each sheet and list column names
+    for sheet in sheet_names:
+        print(f"[INFO] Reading sheet: {sheet}")
+        df = pd.read_excel(xls, sheet_name=sheet)
+        print(f"[SUCCESS] Sheet '{sheet}' loaded successfully. Total columns: {len(df.columns)}")
 
-    # Print all column names
-    print("[INFO] Listing all column names:")
-    for col in df.columns:
-        print(f"- {col}")
+        print("[INFO] Column names:")
+        for col in df.columns:
+            print(f"- {col}")
+        print("-" * 50)
 
 except FileNotFoundError:
     print(f"[ERROR] File not found at path: {file_path}")
