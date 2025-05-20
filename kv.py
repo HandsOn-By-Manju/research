@@ -2,54 +2,55 @@ import pandas as pd
 import os
 import json
 import time
-
 from pandas.io.excel import ExcelWriter
 
 # ====== CONFIGURATION ======
 input_file = "keyvault_input.xlsx"
 output_file = "keyvault_filtered_network_access_report.xlsx"
 sheet_name = "Sheet1"
-policy_id_filter = ["KV-PublicAccess", "KV-OpenToAll"]  # Change as needed
+policy_id_filter = ["KV-PublicAccess", "KV-OpenToAll"]  # Modify as needed
 # ===========================
 
 start = time.time()
 
-# Load Excel
+# Load Excel file
 df = pd.read_excel(input_file, sheet_name=sheet_name)
 print(f"📄 Loaded {len(df)} rows from {input_file}")
 
-# Normalize 'Policy ID' for filtering
+# Clean and normalize Policy ID
 df["Policy ID"] = df["Policy ID"].astype(str).str.strip().str.upper()
 normalized_policy_filter = [pid.strip().upper() for pid in policy_id_filter]
 
-# Filter rows by Policy ID
+# Filter by Policy ID
 filtered_df = df[df["Policy ID"].isin(normalized_policy_filter)]
-print(f"🔍 Found {len(filtered_df)} matching rows for Policy ID(s): {policy_id_filter}")
+total = len(filtered_df)
+print(f"🔍 Found {total} matching rows for Policy ID(s): {policy_id_filter}")
 
+# Initialize result tracking
 results = []
 success_count = 0
 error_count = 0
-total = len(filtered_df)
 
-for idx, row in filtered_df.iterrows():
+# Loop through filtered rows with correct counter
+for row_num, (_, row) in enumerate(filtered_df.iterrows(), start=1):
     subscription_id = str(row["Subscription ID"]).strip()
     kv_name = str(row["Key Vault Name"]).strip()
     policy_id = str(row["Policy ID"]).strip()
 
-    print(f"\n🔄 [{idx + 1}/{total}] Checking Key Vault: {kv_name} (Policy: {policy_id})")
+    print(f"\n🔄 [{row_num}/{total}] Checking Key Vault: {kv_name} (Policy: {policy_id})")
 
     try:
         # Set subscription
         os.system(f'az account set --subscription "{subscription_id}"')
 
-        # Run az CLI and get output
+        # Run Azure CLI and get JSON output
         az_cmd = f'az keyvault show --name "{kv_name}" --subscription "{subscription_id}" --output json'
         with os.popen(az_cmd) as stream:
             raw_output = stream.read()
 
         kv_data = json.loads(raw_output)
 
-        # Extract desired fields
+        # Extract fields
         network_acls = json.dumps(kv_data.get("properties", {}).get("networkAcls", {}), indent=2)
         public_network_access = kv_data.get("properties", {}).get("publicNetworkAccess", "Unknown")
         private_endpoint_connections = kv_data.get("properties", {}).get("privateEndpointConnections", [])
@@ -80,7 +81,7 @@ for idx, row in filtered_df.iterrows():
             "Network ACLs (Raw JSON)": f"Error: {str(e)}"
         })
 
-# Write to Excel
+# Save results to Excel
 result_df = pd.DataFrame(results)
 
 with pd.ExcelWriter(output_file, engine="xlsxwriter") as writer:
@@ -88,7 +89,7 @@ with pd.ExcelWriter(output_file, engine="xlsxwriter") as writer:
     workbook = writer.book
     worksheet = writer.sheets["Filtered Access Report"]
 
-    # Format headers
+    # Header formatting
     header_format = workbook.add_format({'bold': True, 'bg_color': '#87CEEB', 'border': 1})
     for col_num, col_name in enumerate(result_df.columns):
         worksheet.write(0, col_num, col_name, header_format)
@@ -96,10 +97,12 @@ with pd.ExcelWriter(output_file, engine="xlsxwriter") as writer:
 
     worksheet.freeze_panes(1, 0)
 
+# Time stats
 end = time.time()
 elapsed = round(end - start, 2)
 minutes = round(elapsed / 60, 2)
 
+# Summary
 print("\n📊 Summary:")
 print(f"✅ Successful checks: {success_count}")
 print(f"❌ Errors: {error_count}")
