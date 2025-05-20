@@ -4,16 +4,15 @@ import pandas as pd
 excel_file_path = "your_excel_file.xlsx"               # <- Update your Excel file path
 sheet_name = 0                                          # <- Sheet index or name
 filter_column_name = "Severity"                        # <- Column to filter
-filter_value = "Critical"                              # <- Value to filter on
 target_column_name = "Subscription ID"                 # <- Column from which to extract values
 
 # Per-item prefix/suffix
 prefix = "prefix_data_for_each_subscriptions"
 suffix = "suffix_data_for_each_subscriptions"
 
-# Final combined string prefix/suffix
-final_prefix = "FINAL_PREFIX_"
-final_suffix = "_FINAL_SUFFIX"
+# Final prefix is the BASE URL
+final_base_url = "https://example.com/trigger/"         # <- Final prefix becomes base URL
+final_suffix = "_FINAL_SUFFIX"                          # <- Optional suffix for full string
 
 # === Step 1: Load Excel File ===
 print("[INFO] Loading Excel file...")
@@ -24,19 +23,26 @@ missing_cols = [col for col in [filter_column_name, target_column_name] if col n
 if missing_cols:
     print(f"[ERROR] Column(s) not found in Excel: {', '.join(missing_cols)}")
 else:
-    # === Step 3: Filter Rows ===
-    print(f"[INFO] Filtering rows where '{filter_column_name}' == '{filter_value}'...")
-    filtered_df = df[df[filter_column_name].astype(str).str.strip().str.lower() == filter_value.strip().lower()]
+    # === Step 3: Get All Unique Values in Filter Column ===
+    unique_filter_values = df[filter_column_name].dropna().astype(str).unique().tolist()
+    print(f"[INFO] Found {len(unique_filter_values)} unique values in '{filter_column_name}' column.\n")
 
-    if filtered_df.empty:
-        print(f"[WARN] No rows found with {filter_column_name} = '{filter_value}'")
-    else:
-        # === Step 4: Extract Target Values ===
+    for filter_val in unique_filter_values:
+        print(f"[INFO] Processing for '{filter_column_name}' = '{filter_val}'...")
+
+        # Filter rows for this filter_val
+        filtered_df = df[df[filter_column_name].astype(str).str.strip().str.lower() == filter_val.strip().lower()]
+
+        if filtered_df.empty:
+            print(f"[WARN] No rows found for value: {filter_val}")
+            continue
+
+        # Extract target column values
         values = filtered_df[target_column_name].dropna().astype(str).unique().tolist()
         count = len(values)
-        print(f"[INFO] Found {count} unique values in '{target_column_name}' after filtering.")
+        print(f"  -> Found {count} unique '{target_column_name}' values.")
 
-        # === Step 5: Format Each Item ===
+        # Format each value
         formatted_items = []
         for i, val in enumerate(values):
             item = f"{prefix}{val}"
@@ -46,10 +52,8 @@ else:
 
         combined_string = "".join(formatted_items)
 
-        # === Step 6: Add Final Prefix/Suffix ===
-        final_output = f"{final_prefix}{combined_string}{final_suffix}"
+        # Build final clickable URL
+        final_url = f"{final_base_url}{combined_string}{final_suffix}"
 
-        # === Step 7: Output Result ===
-        print("\n[RESULT] Final formatted string:\n")
-        print(final_output)
-        print(f"\n[INFO] Total count of unique '{target_column_name}': {count}")
+        # Print final output
+        print(f"  -> Final URL:\n     {final_url}\n")
