@@ -1,60 +1,109 @@
 import os
 import pandas as pd
+import time
+from openpyxl import load_workbook
+from openpyxl.styles import Alignment, PatternFill
+from openpyxl.utils import get_column_letter
 
-# === STEP 1: Setup ===
-folder_path = os.getcwd()
-excel_extensions = ('.xlsx', '.xls')
-excel_files = [f for f in os.listdir(folder_path) if f.endswith(excel_extensions) and not f.startswith('~$')]
+def list_excel_files():
+    excel_files = [file for file in os.listdir() if file.endswith(('.xlsx', '.xls')) and not file.startswith('~$')]
+    print(f"\n🔍 Found {len(excel_files)} Excel file(s) in the current directory:\n")
+    for f in excel_files:
+        print(f"  - {f}")
+    return excel_files
 
-print(f"📂 Current Folder: {folder_path}")
-print(f"📄 Excel Files Found: {len(excel_files)}")
-for f in excel_files:
-    print(f"   - {f}")
+def read_columns(file):
+    try:
+        df = pd.read_excel(file)
+        return list(df.columns), df
+    except Exception as e:
+        print(f"❌ Error reading file {file}: {e}")
+        return [], None
 
-if not excel_files:
-    print("❌ No Excel files found. Exiting.")
-    exit()
+def check_column_consistency(files):
+    reference_columns, _ = read_columns(files[0])
+    mismatch_files = []
+    for file in files[1:]:
+        current_columns, _ = read_columns(file)
+        if current_columns != reference_columns:
+            mismatch_files.append(file)
+    return len(mismatch_files) == 0, reference_columns, mismatch_files
 
-# === STEP 2: Column Validation ===
-first_file = pd.read_excel(excel_files[0])
-expected_columns = list(first_file.columns)
-expected_col_count = len(expected_columns)
+def merge_files(files, columns):
+    merged_df = pd.DataFrame(columns=columns)
+    for file in files:
+        df = pd.read_excel(file)
+        merged_df = pd.concat([merged_df, df], ignore_index=True)
+        print(f"✅ Merged data from: {file} ({len(df)} rows)")
+    return merged_df
 
-print(f"\n📌 Expected Column Structure (from first file: {excel_files[0]}):")
-print(f"   Column Count: {expected_col_count}")
-print(f"   Column Names: {expected_columns}")
+def apply_excel_formatting(filename):
+    print(f"🎨 Applying formatting to: {filename}")
+    wb = load_workbook(filename)
+    ws = wb.active
 
-all_match = True
-for file in excel_files:
-    df = pd.read_excel(file)
-    current_columns = list(df.columns)
-    if current_columns != expected_columns:
-        print(f"❌ Column mismatch in: {file}")
-        print(f"   Found Columns: {current_columns}")
-        all_match = False
+    # Freeze top row
+    ws.freeze_panes = "A2"
+
+    # Style header row
+    header_fill = PatternFill(start_color="87CEEB", end_color="87CEEB", fill_type="solid")
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='left', vertical='top', wrap_text=True)
+
+    # Autofit column widths and apply alignment
+    for col in ws.columns:
+        max_length = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            try:
+                max_length = max(max_length, len(str(cell.value)))
+                cell.alignment = Alignment(horizontal='left', vertical='top', wrap_text=True)
+            except:
+                pass
+        adjusted_width = max_length + 2
+        ws.column_dimensions[col_letter].width = adjusted_width
+
+    wb.save(filename)
+    print(f"✅ Formatting completed and saved: {filename}")
+
+def format_time(seconds):
+    if seconds < 60:
+        return f"{seconds:.2f} seconds"
+    elif seconds < 3600:
+        return f"{seconds/60:.2f} minutes"
     else:
-        print(f"✔️ Columns match in: {file}")
+        return f"{seconds/3600:.2f} hours"
 
-if all_match:
-    print("\n✅ All files have matching column names, count, and sequence.")
-else:
-    print("\n⚠️ One or more files have mismatched columns. Please fix and retry.")
-    exit()
+def main():
+    start_time = time.time()
+    print("🚀 Starting Excel Merge Script...\n")
 
-# === STEP 3: Count by Severity and Policy ID ===
-print("\n📊 Row Counts by Severity and Policy ID:")
-for file in excel_files:
-    df = pd.read_excel(file)
-    print(f"\n📁 File: {file}")
-    
-    if 'Severity' in df.columns:
-        print("   🔹 Severity Counts:")
-        print(df['Severity'].value_counts().to_string())
+    files = list_excel_files()
+    if not files:
+        print("⚠️ No Excel files found. Exiting.")
+        return
+
+    print("\n🔎 Checking if all Excel files have the same column names and order...\n")
+    all_match, reference_columns, mismatch_files = check_column_consistency(files)
+
+    if all_match:
+        print("✅ All files have matching columns. Proceeding to merge...\n")
+        merged_df = merge_files(files, reference_columns)
+        output_file = "merged_output.xlsx"
+        merged_df.to_excel(output_file, index=False)
+        apply_excel_formatting(output_file)
+        print(f"\n📁 Merged output saved as: {output_file}")
     else:
-        print("   ⚠️ 'Severity' column not found.")
-    
-    if 'Policy ID' in df.columns:
-        print("   🔹 Policy ID Counts (Top 10):")
-        print(df['Policy ID'].value_counts().head(10).to_string())
-    else:
-        print("   ⚠️ 'Policy ID' column not found.")
+        print("❌ Column mismatch found in the following files:\n")
+        for file in mismatch_files:
+            print(f"  - {file}")
+        print("\n🛑 Please fix column mismatch before merging. Exiting.")
+        return
+
+    end_time = time.time()
+    elapsed = end_time - start_time
+    print(f"\n⏱️ Script completed in {format_time(elapsed)}.")
+
+if __name__ == "__main__":
+    main()
