@@ -1,7 +1,7 @@
 import pandas as pd
-import subprocess
-import time
+import os
 import json
+import time
 
 from pandas.io.excel import ExcelWriter
 
@@ -9,7 +9,7 @@ from pandas.io.excel import ExcelWriter
 input_file = "keyvault_input.xlsx"
 output_file = "keyvault_filtered_network_access_report.xlsx"
 sheet_name = "Sheet1"
-policy_id_filter = ["KV-PublicAccess", "KV-OpenToAll"]  # <--- Modify this as needed
+policy_id_filter = ["KV-PublicAccess", "KV-OpenToAll"]  # Change as needed
 # ===========================
 
 start = time.time()
@@ -18,7 +18,7 @@ start = time.time()
 df = pd.read_excel(input_file, sheet_name=sheet_name)
 print(f"📄 Loaded {len(df)} rows from {input_file}")
 
-# Clean and normalize 'Policy ID' for filtering
+# Normalize 'Policy ID' for filtering
 df["Policy ID"] = df["Policy ID"].astype(str).str.strip().str.upper()
 normalized_policy_filter = [pid.strip().upper() for pid in policy_id_filter]
 
@@ -36,17 +36,17 @@ for idx, row in filtered_df.iterrows():
     print(f"\n🔄 Checking: KeyVault={kv_name}, Subscription={subscription_id}, Policy={policy_id}")
 
     try:
-        subprocess.run(["az", "account", "set", "--subscription", subscription_id], check=True)
+        # Switch subscription using os.system (no capture needed)
+        os.system(f'az account set --subscription "{subscription_id}"')
 
-        cmd = [
-            "az", "keyvault", "show",
-            "--name", kv_name,
-            "--subscription", subscription_id,
-            "--output", "json"
-        ]
-        raw_output = subprocess.check_output(cmd, text=True)
+        # Run the AZ command and capture JSON output
+        az_cmd = f'az keyvault show --name "{kv_name}" --subscription "{subscription_id}" --output json'
+        with os.popen(az_cmd) as stream:
+            raw_output = stream.read()
+
         kv_data = json.loads(raw_output)
 
+        # Extract desired fields
         network_acls = json.dumps(kv_data.get("properties", {}).get("networkAcls", {}), indent=2)
         public_network_access = kv_data.get("properties", {}).get("publicNetworkAccess", "Unknown")
         private_endpoint_connections = kv_data.get("properties", {}).get("privateEndpointConnections", [])
@@ -63,7 +63,7 @@ for idx, row in filtered_df.iterrows():
             "Network ACLs (Raw JSON)": network_acls
         })
 
-    except subprocess.CalledProcessError as e:
+    except Exception as e:
         print(f"⚠️ Error for {kv_name}: {e}")
         results.append({
             "Policy ID": policy_id,
@@ -74,7 +74,7 @@ for idx, row in filtered_df.iterrows():
             "Network ACLs (Raw JSON)": f"Error: {str(e)}"
         })
 
-# Save to Excel
+# Write results to Excel
 result_df = pd.DataFrame(results)
 
 with pd.ExcelWriter(output_file, engine="xlsxwriter") as writer:
@@ -82,7 +82,7 @@ with pd.ExcelWriter(output_file, engine="xlsxwriter") as writer:
     workbook = writer.book
     worksheet = writer.sheets["Filtered Access Report"]
 
-    # Format headers
+    # Formatting
     header_format = workbook.add_format({'bold': True, 'bg_color': '#87CEEB', 'border': 1})
     for col_num, col_name in enumerate(result_df.columns):
         worksheet.write(0, col_num, col_name, header_format)
