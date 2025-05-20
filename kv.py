@@ -27,19 +27,22 @@ filtered_df = df[df["Policy ID"].isin(normalized_policy_filter)]
 print(f"🔍 Found {len(filtered_df)} matching rows for Policy ID(s): {policy_id_filter}")
 
 results = []
+success_count = 0
+error_count = 0
+total = len(filtered_df)
 
 for idx, row in filtered_df.iterrows():
     subscription_id = str(row["Subscription ID"]).strip()
     kv_name = str(row["Key Vault Name"]).strip()
     policy_id = str(row["Policy ID"]).strip()
 
-    print(f"\n🔄 Checking: KeyVault={kv_name}, Subscription={subscription_id}, Policy={policy_id}")
+    print(f"\n🔄 [{idx + 1}/{total}] Checking Key Vault: {kv_name} (Policy: {policy_id})")
 
     try:
-        # Switch subscription using os.system (no capture needed)
+        # Set subscription
         os.system(f'az account set --subscription "{subscription_id}"')
 
-        # Run the AZ command and capture JSON output
+        # Run az CLI and get output
         az_cmd = f'az keyvault show --name "{kv_name}" --subscription "{subscription_id}" --output json'
         with os.popen(az_cmd) as stream:
             raw_output = stream.read()
@@ -52,7 +55,8 @@ for idx, row in filtered_df.iterrows():
         private_endpoint_connections = kv_data.get("properties", {}).get("privateEndpointConnections", [])
         private_endpoint_summary = f"{len(private_endpoint_connections)} endpoint(s)" if private_endpoint_connections else "None"
 
-        print(f"✅ Access: Public={public_network_access}, Private={private_endpoint_summary}")
+        print(f"✅ Success: Public={public_network_access}, Private={private_endpoint_summary}")
+        success_count += 1
 
         results.append({
             "Policy ID": policy_id,
@@ -64,7 +68,9 @@ for idx, row in filtered_df.iterrows():
         })
 
     except Exception as e:
-        print(f"⚠️ Error for {kv_name}: {e}")
+        print(f"❌ Error: Could not retrieve Key Vault '{kv_name}' → {e}")
+        error_count += 1
+
         results.append({
             "Policy ID": policy_id,
             "Subscription ID": subscription_id,
@@ -74,7 +80,7 @@ for idx, row in filtered_df.iterrows():
             "Network ACLs (Raw JSON)": f"Error: {str(e)}"
         })
 
-# Write results to Excel
+# Write to Excel
 result_df = pd.DataFrame(results)
 
 with pd.ExcelWriter(output_file, engine="xlsxwriter") as writer:
@@ -82,7 +88,7 @@ with pd.ExcelWriter(output_file, engine="xlsxwriter") as writer:
     workbook = writer.book
     worksheet = writer.sheets["Filtered Access Report"]
 
-    # Formatting
+    # Format headers
     header_format = workbook.add_format({'bold': True, 'bg_color': '#87CEEB', 'border': 1})
     for col_num, col_name in enumerate(result_df.columns):
         worksheet.write(0, col_num, col_name, header_format)
@@ -90,5 +96,12 @@ with pd.ExcelWriter(output_file, engine="xlsxwriter") as writer:
 
     worksheet.freeze_panes(1, 0)
 
-print(f"\n✅ Filtered report saved to: {output_file}")
-print(f"⏱️ Completed in {round(time.time() - start, 2)} seconds.")
+end = time.time()
+elapsed = round(end - start, 2)
+minutes = round(elapsed / 60, 2)
+
+print("\n📊 Summary:")
+print(f"✅ Successful checks: {success_count}")
+print(f"❌ Errors: {error_count}")
+print(f"📁 Excel report saved to: {output_file}")
+print(f"⏱️ Total time: {elapsed} seconds ({minutes} mins)")
