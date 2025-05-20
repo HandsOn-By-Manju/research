@@ -1,60 +1,74 @@
+import pandas as pd
 import time
 from azure.identity import AzureCliCredential
 from azure.mgmt.keyvault import KeyVaultManagementClient
 
 # ---------------------
-# 🔧 Configuration
+# 📥 Input Config
 # ---------------------
-SUBSCRIPTION_ID = "your-subscription-id"   # Replace with your Subscription ID
-KEYVAULT_NAME = "your-keyvault-name"       # Replace with your Key Vault name
+INPUT_FILE = "keyvault_input.xlsx"  # or CSV
+SHEET_NAME = "Sheet1"
+POLICY_FILTER_VALUE = "abc"
 
 # ---------------------
-# 🔐 Authenticate using Azure CLI Login
+# 🔐 Azure CLI Auth
 # ---------------------
 credential = AzureCliCredential()
-client = KeyVaultManagementClient(credential, SUBSCRIPTION_ID)
 
 # ---------------------
-# 🔍 Search for the Key Vault by name
+# 🧾 Load and Filter Input File
 # ---------------------
-print(f"🔎 Searching for Key Vault '{KEYVAULT_NAME}' in subscription '{SUBSCRIPTION_ID}'...")
-start_time = time.time()
+df = pd.read_excel(INPUT_FILE, sheet_name=SHEET_NAME)  # or use read_csv()
+filtered_df = df[df["Policy ID"] == POLICY_FILTER_VALUE]
 
-keyvault_found = None
-for vault in client.vaults.list():
-    if vault.name.lower() == KEYVAULT_NAME.lower():
-        keyvault_found = vault
-        break
+print(f"\n📊 Total entries in file: {len(df)}")
+print(f"🔎 Filtered rows with Policy ID = '{POLICY_FILTER_VALUE}': {len(filtered_df)}")
 
-if not keyvault_found:
-    print(f"❌ Key Vault '{KEYVAULT_NAME}' not found in subscription '{SUBSCRIPTION_ID}'.")
-else:
-    # Extract resource group from the ID
-    resource_id_parts = keyvault_found.id.split('/')
-    rg_index = resource_id_parts.index('resourceGroups') + 1
-    resource_group_name = resource_id_parts[rg_index]
+if filtered_df.empty:
+    print("⚠️ No rows match the given Policy ID filter. Exiting.")
+    exit()
 
-    print(f"✅ Found Key Vault in resource group: {resource_group_name}")
-    
-    # ---------------------
-    # 📥 Fetch Full Vault Details
-    # ---------------------
-    vault_details = client.vaults.get(resource_group_name, KEYVAULT_NAME)
+# ---------------------
+# 🚀 Process Each Filtered Row
+# ---------------------
+for idx, row in filtered_df.iterrows():
+    subscription_id = row['Subscription ID']
+    keyvault_name = row['Key Vault Name']
 
-    network_acls = vault_details.properties.network_acls.as_dict() if vault_details.properties.network_acls else None
-    private_endpoints = [pe.as_dict() for pe in (vault_details.properties.private_endpoint_connections or [])]
-    public_network_access = vault_details.properties.public_network_access
+    print(f"\n🔍 [{idx+1}] Processing Key Vault '{keyvault_name}' in subscription '{subscription_id}'...")
 
-    # ---------------------
-    # 🖨️ Output
-    # ---------------------
-    print("\n🌐 Network ACLs:")
-    print(network_acls)
+    try:
+        client = KeyVaultManagementClient(credential, subscription_id)
+        vault_found = None
 
-    print("\n🔗 Private Endpoint Connections:")
-    print(private_endpoints)
+        # Search Key Vault by name
+        for vault in client.vaults.list():
+            if vault.name.lower() == keyvault_name.lower():
+                vault_found = vault
+                break
 
-    print("\n🌍 Public Network Access:")
-    print(public_network_access)
+        if not vault_found:
+            print(f"❌ Key Vault '{keyvault_name}' not found.")
+            continue
 
-    print(f"\n⏱️ Completed in {round(time.time() - start_time, 2)} seconds.")
+        # Extract resource group from resource ID
+        rg_index = vault_found.id.split('/').index('resourceGroups') + 1
+        resource_group_name = vault_found.id.split('/')[rg_index]
+
+        # Get full vault details
+        vault_details = client.vaults.get(resource_group_name, keyvault_name)
+
+        network_acls = vault_details.properties.network_acls.as_dict() if vault_details.properties.network_acls else None
+        private_endpoints = [pe.as_dict() for pe in (vault_details.properties.private_endpoint_connections or [])]
+        public_network_access = vault_details.properties.public_network_access
+
+        # Print results
+        print(f"✅ Resource Group: {resource_group_name}")
+        print("🌐 Network ACLs:", network_acls)
+        print("🔗 Private Endpoint Connections:", private_endpoints)
+        print("🌍 Public Network Access:", public_network_access)
+
+    except Exception as e:
+        print(f"❗ Error processing '{keyvault_name}': {e}")
+
+print("\n✅ Finished processing all filtered Key Vaults.")
