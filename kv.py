@@ -5,12 +5,12 @@ import json
 
 from pandas.io.excel import ExcelWriter
 
-# ====== CONFIG ======
+# ====== CONFIGURATION ======
 input_file = "keyvault_input.xlsx"
 output_file = "keyvault_filtered_network_access_report.xlsx"
 sheet_name = "Sheet1"
-policy_id_filter = ["KV-PublicAccess", "KV-OpenToAll"]  # Change as needed
-# =====================
+policy_id_filter = ["KV-PublicAccess", "KV-OpenToAll"]  # <--- Modify this as needed
+# ===========================
 
 start = time.time()
 
@@ -18,9 +18,13 @@ start = time.time()
 df = pd.read_excel(input_file, sheet_name=sheet_name)
 print(f"📄 Loaded {len(df)} rows from {input_file}")
 
+# Clean and normalize 'Policy ID' for filtering
+df["Policy ID"] = df["Policy ID"].astype(str).str.strip().str.upper()
+normalized_policy_filter = [pid.strip().upper() for pid in policy_id_filter]
+
 # Filter rows by Policy ID
-filtered_df = df[df["Policy ID"].isin(policy_id_filter)]
-print(f"🔍 Found {len(filtered_df)} rows matching Policy ID(s): {policy_id_filter}")
+filtered_df = df[df["Policy ID"].isin(normalized_policy_filter)]
+print(f"🔍 Found {len(filtered_df)} matching rows for Policy ID(s): {policy_id_filter}")
 
 results = []
 
@@ -78,7 +82,7 @@ with pd.ExcelWriter(output_file, engine="xlsxwriter") as writer:
     workbook = writer.book
     worksheet = writer.sheets["Filtered Access Report"]
 
-    # Header formatting
+    # Format headers
     header_format = workbook.add_format({'bold': True, 'bg_color': '#87CEEB', 'border': 1})
     for col_num, col_name in enumerate(result_df.columns):
         worksheet.write(0, col_num, col_name, header_format)
