@@ -1,3 +1,5 @@
+# === Final Enhanced Script ===
+
 import os
 import time
 import pandas as pd
@@ -14,8 +16,8 @@ output_file = "merged_output.xlsx"
 log_file = os.path.join(folder_path, "merge_log.txt")
 
 # Configurable filters
-remove_severity = ["Informational", "Low"]  # Severities to remove
-remove_policy_ids = ["POL-001", "POL-999"]  # Policy IDs to remove
+remove_severity = ["Informational", "Low"]        # Remove rows with these severities
+remove_policy_ids = ["POL-001", "POL-999"]        # Remove rows with these Policy IDs
 
 # === SAFETY CHECK ===
 if not os.path.isdir(folder_path):
@@ -66,11 +68,32 @@ for file in excel_files:
         exit()
 
     original_rows = len(df)
+    removed_rows = 0
 
-    # === Apply filters ===
+    # === Filtering by Severity ===
     if 'Severity' in df.columns:
+        for sev in remove_severity:
+            count = df[df['Severity'] == sev].shape[0]
+            if count > 0:
+                log_lines.append(f"{file} → Removing {count} rows with Severity = '{sev}'")
+                print(f"🧹 {file}: Removed {count} rows with Severity = '{sev}'")
+                removed_rows += count
+            else:
+                log_lines.append(f"{file} → No rows found with Severity = '{sev}'")
+                print(f"ℹ️ {file}: No rows with Severity = '{sev}'")
         df = df[~df['Severity'].isin(remove_severity)]
+
+    # === Filtering by Policy ID ===
     if 'Policy ID' in df.columns:
+        for pid in remove_policy_ids:
+            count = df[df['Policy ID'] == pid].shape[0]
+            if count > 0:
+                log_lines.append(f"{file} → Removing {count} rows with Policy ID = '{pid}'")
+                print(f"🧹 {file}: Removed {count} rows with Policy ID = '{pid}'")
+                removed_rows += count
+            else:
+                log_lines.append(f"{file} → No rows found with Policy ID = '{pid}'")
+                print(f"ℹ️ {file}: No rows with Policy ID = '{pid}'")
         df = df[~df['Policy ID'].isin(remove_policy_ids)]
 
     row_counts[file] = len(df)
@@ -94,7 +117,7 @@ for file in excel_files:
             bu_severity_summary[bu][sev] += cnt
 
     all_dataframes.append(df)
-    print(f"✅ File '{file}': Loaded {original_rows} → Retained {len(df)} rows after filtering.")
+    print(f"✅ {file}: Loaded {original_rows} → Retained {len(df)} rows (Removed {removed_rows})")
 
 # === STEP 3: Merge Files ===
 print("\n🔧 Merging all data...")
@@ -137,7 +160,7 @@ if bu_severity_summary:
         for sev, cnt in sev_dict.items():
             log_lines.append(f"    {sev}: {cnt}")
 
-# === STEP 6: Show Time Taken in Smart Format ===
+# === STEP 6: Show Time Taken ===
 end_time = time.time()
 elapsed = int(end_time - start_time)
 
