@@ -11,31 +11,36 @@ from pandas.io.excel import ExcelWriter
 input_file = "keyvault_input.xlsx"
 output_file = "keyvault_filtered_network_access_report_sdk.xlsx"
 sheet_name = "Sheet1"
-policy_id_filter = ["KV-PublicAccess", "KV-OpenToAll"]  # <- Update your filter values
+policy_id_filter = ["KV-PublicAccess", "KV-OpenToAll"]  # Edit as needed
 # ==========================
 
 start_time = time.time()
 
 # Step 1: Load Excel input
 df = pd.read_excel(input_file, sheet_name=sheet_name)
-df["Policy ID"] = df["Policy ID"].astype(str).str.strip().str.upper()
+
+# Normalize column names
+df.columns = df.columns.str.strip().str.title()
+
+# Normalize Policy ID values
+df["Policy Id"] = df["Policy Id"].astype(str).str.strip().str.upper()
 normalized_filter = [pid.strip().upper() for pid in policy_id_filter]
-filtered_df = df[df["Policy ID"].isin(normalized_filter)]
+filtered_df = df[df["Policy Id"].isin(normalized_filter)]
 
 print(f"📄 Loaded {len(filtered_df)} filtered Key Vault rows matching Policy IDs: {policy_id_filter}")
 
-# Step 2: Authenticate using Azure CLI session
+# Step 2: Azure SDK client using Azure CLI auth
 credential = AzureCliCredential()
 results = []
 success_count = 0
 error_count = 0
 
-# Step 3: Iterate through filtered rows
+# Step 3: Loop through each filtered row
 for idx, row in enumerate(filtered_df.itertuples(index=False), start=1):
     row_dict = row._asdict()
-    sub_id = row_dict["Subscription ID"]
+    sub_id = row_dict["Subscription Id"]
     vault_name = row_dict["Key Vault Name"]
-    policy_id = row_dict["Policy ID"]
+    policy_id = row_dict["Policy Id"]
 
     print(f"\n🔄 [{idx}/{len(filtered_df)}] Checking Key Vault: {vault_name} in Subscription: {sub_id}")
 
@@ -43,7 +48,7 @@ for idx, row in enumerate(filtered_df.itertuples(index=False), start=1):
         # Get KeyVault client for this subscription
         kv_client = KeyVaultManagementClient(credential, sub_id)
 
-        # Find vault by name
+        # List all vaults and find match by name
         vaults = kv_client.vaults.list()
         match = next((v for v in vaults if v.name.lower() == vault_name.lower()), None)
 
@@ -72,7 +77,6 @@ for idx, row in enumerate(filtered_df.itertuples(index=False), start=1):
     except Exception as ex:
         print(f"❌ Error: {ex}")
         error_count += 1
-
         results.append({
             "Policy ID": policy_id,
             "Subscription ID": sub_id,
@@ -90,14 +94,14 @@ with pd.ExcelWriter(output_file, engine="xlsxwriter") as writer:
     workbook = writer.book
     worksheet = writer.sheets["Access Report"]
 
-    # Formatting
+    # Header style
     header_format = workbook.add_format({'bold': True, 'bg_color': '#87CEEB', 'border': 1})
     for col_num, col_name in enumerate(result_df.columns):
         worksheet.write(0, col_num, col_name, header_format)
         worksheet.set_column(col_num, col_num, 50)
     worksheet.freeze_panes(1, 0)
 
-# Final Summary
+# Final summary
 elapsed = round(time.time() - start_time, 2)
 print("\n📊 Summary:")
 print(f"✅ Successful checks: {success_count}")
