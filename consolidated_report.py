@@ -5,7 +5,7 @@ from openpyxl import load_workbook
 from openpyxl.styles import Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 
-# --- CONFIGURATION ---
+# --- CONFIGURABLE FILTERS ---
 FILTER_SEVERITY_LIST = ["Informational", "Low"]
 FILTER_POLICY_ID_LIST = ["XYZ-00123", "ABC-99999"]
 
@@ -79,16 +79,21 @@ def filter_rows(df):
     original_count = len(df)
     filtered_df = df.copy()
 
-    if "Severity" in df.columns:
+    # Normalize Severity
+    if "Severity" in filtered_df.columns:
+        filtered_df["Severity"] = filtered_df["Severity"].astype(str).str.strip()
         severity_count = filtered_df[filtered_df["Severity"].isin(FILTER_SEVERITY_LIST)].shape[0]
         filtered_df = filtered_df[~filtered_df["Severity"].isin(FILTER_SEVERITY_LIST)]
         print(f"🗑️ Removed {severity_count} row(s) with Severity in {FILTER_SEVERITY_LIST}")
     else:
         print("⚠️ Column 'Severity' not found. Skipping severity filter.")
 
-    if "Policy ID" in df.columns:
-        policy_count = filtered_df[filtered_df["Policy ID"].isin(FILTER_POLICY_ID_LIST)].shape[0]
-        filtered_df = filtered_df[~filtered_df["Policy ID"].isin(FILTER_POLICY_ID_LIST)]
+    # Normalize Policy ID
+    if "Policy ID" in filtered_df.columns:
+        filtered_df["Policy ID"] = filtered_df["Policy ID"].astype(str).str.strip()
+        normalized_filter_ids = [str(pid).strip() for pid in FILTER_POLICY_ID_LIST]
+        policy_count = filtered_df[filtered_df["Policy ID"].isin(normalized_filter_ids)].shape[0]
+        filtered_df = filtered_df[~filtered_df["Policy ID"].isin(normalized_filter_ids)]
         print(f"🗑️ Removed {policy_count} row(s) with Policy ID in {FILTER_POLICY_ID_LIST}")
     else:
         print("⚠️ Column 'Policy ID' not found. Skipping policy ID filter.")
@@ -100,13 +105,14 @@ def add_summary_sheets(df, file_path, sheet_prefix=""):
     try:
         with pd.ExcelWriter(file_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
             # --- Overall Summary ---
-            overall = df['Severity'].value_counts().reset_index()
-            overall.columns = ['Severity', 'Count']
-            overall.loc[len(overall.index)] = ['Total Findings', len(df)]
-            overall.to_excel(writer, sheet_name=f"{sheet_prefix}Summary_Overall", index=False)
+            if "Severity" in df.columns:
+                overall = df['Severity'].value_counts().reset_index()
+                overall.columns = ['Severity', 'Count']
+                overall.loc[len(overall.index)] = ['Total Findings', len(df)]
+                overall.to_excel(writer, sheet_name=f"{sheet_prefix}Summary_Overall", index=False)
 
             # --- BU-wise Summary ---
-            if 'BU' in df.columns:
+            if 'BU' in df.columns and 'Severity' in df.columns:
                 bu_summary = (
                     df.groupby(['BU', 'Severity'])
                     .size()
@@ -116,13 +122,13 @@ def add_summary_sheets(df, file_path, sheet_prefix=""):
                 bu_summary["Total"] = bu_summary.iloc[:, 1:].sum(axis=1)
                 bu_summary.to_excel(writer, sheet_name=f"{sheet_prefix}Summary_By_BU", index=False)
             else:
-                print("⚠️ Column 'BU' not found. Skipping BU-wise summary.")
+                print("⚠️ Columns 'BU' or 'Severity' not found. Skipping BU-wise summary.")
     except Exception as e:
         print(f"❌ Failed to write summary sheets to {file_path}: {e}")
 
 def main():
     start_time = time.time()
-    print("🚀 Starting Excel Merge Script with Multi-Filter + Summary...\n")
+    print("🚀 Starting Excel Merge Script with Filters + Summary...\n")
 
     files = list_excel_files()
     if not files:
