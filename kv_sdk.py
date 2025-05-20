@@ -6,9 +6,9 @@ from azure.mgmt.keyvault import KeyVaultManagementClient
 # ---------------------
 # 📥 Input Config
 # ---------------------
-INPUT_FILE = "keyvault_input.xlsx"   # or CSV
+INPUT_FILE = "keyvault_input.xlsx"
 SHEET_NAME = "Sheet1"
-POLICY_FILTER_VALUE = "123456"       # <- Numeric Policy ID as string
+POLICY_FILTER_VALUE = "123456"  # Replace with your numeric/string Policy ID
 
 # ---------------------
 # 🔐 Azure CLI Auth
@@ -16,22 +16,27 @@ POLICY_FILTER_VALUE = "123456"       # <- Numeric Policy ID as string
 credential = AzureCliCredential()
 
 # ---------------------
+# ⏱️ Start Timer
+# ---------------------
+start_time = time.time()
+
+# ---------------------
 # 🧾 Load and Filter Data
 # ---------------------
 df = pd.read_excel(INPUT_FILE, sheet_name=SHEET_NAME)
 df.columns = df.columns.str.strip()
 
-# Clean and convert Policy ID to string for safe comparison
+# Normalize Policy ID to string and strip
 df['Policy ID'] = df['Policy ID'].apply(lambda x: str(x).strip())
 
-# Filter by exact match (as string)
+# Apply filter
 filtered_df = df[df['Policy ID'] == POLICY_FILTER_VALUE.strip()]
 
 # Display counts
 print(f"\n📊 Total entries in file: {len(df)}")
 print(f"🔎 Filtered rows with Policy ID = '{POLICY_FILTER_VALUE}': {len(filtered_df)}")
 
-# Exit if no rows match
+# Exit if no matches
 if filtered_df.empty:
     print("⚠️ No matching rows found. Exiting.")
     exit()
@@ -39,11 +44,11 @@ if filtered_df.empty:
 # ---------------------
 # 🚀 Process Each Filtered Row
 # ---------------------
-for idx, row in filtered_df.iterrows():
+for count, (_, row) in enumerate(filtered_df.iterrows(), start=1):
     subscription_id = str(row['Subscription ID']).strip()
     keyvault_name = str(row['Key Vault Name']).strip()
 
-    print(f"\n🔍 [{idx+1}] Processing Key Vault '{keyvault_name}' in subscription '{subscription_id}'...")
+    print(f"\n🔍 [{count}] Processing Key Vault '{keyvault_name}' in subscription '{subscription_id}'...")
 
     try:
         client = KeyVaultManagementClient(credential, subscription_id)
@@ -55,7 +60,7 @@ for idx, row in filtered_df.iterrows():
             print(f"❌ Key Vault '{keyvault_name}' not found.")
             continue
 
-        # Extract resource group from resource ID
+        # Extract resource group name from resource ID
         rg_parts = vault_found.id.split('/')
         resource_group_name = rg_parts[rg_parts.index('resourceGroups') + 1]
 
@@ -74,5 +79,17 @@ for idx, row in filtered_df.iterrows():
 
     except Exception as e:
         print(f"❗ Error processing '{keyvault_name}': {e}")
+
+# ---------------------
+# ⏱️ End Timer and Display Duration
+# ---------------------
+end_time = time.time()
+elapsed = end_time - start_time
+if elapsed < 60:
+    print(f"\n⏱️ Execution time: {round(elapsed, 2)} seconds.")
+else:
+    mins = int(elapsed // 60)
+    secs = round(elapsed % 60, 2)
+    print(f"\n⏱️ Execution time: {mins} minutes, {secs} seconds.")
 
 print("\n✅ Finished processing all filtered Key Vaults.")
