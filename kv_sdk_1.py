@@ -4,12 +4,14 @@ from azure.identity import AzureCliCredential
 from azure.mgmt.keyvault import KeyVaultManagementClient
 
 # ---------------------
-# 📥 Input Config
+# 📥 Config
 # ---------------------
 INPUT_FILE = "keyvault_input.xlsx"
 SHEET_NAME = "Sheet1"
-POLICY_FILTER_VALUE = "123456"  # Replace with your Policy ID
+POLICY_FILTER_VALUE = "123456"
 OUTPUT_FILE = "keyvault_output.xlsx"
+PARTIAL_OUTPUT_FILE = "keyvault_output_partial.xlsx"
+SAVE_EVERY = 100  # Save partial output every N rows
 
 # ---------------------
 # 🔐 Azure CLI Auth
@@ -37,13 +39,13 @@ if filtered_df.empty:
     exit()
 
 # ---------------------
-# 📦 Prepare Results Storage
+# 📦 Result Collection
 # ---------------------
 results = []
 total = len(filtered_df)
 
 # ---------------------
-# 🚀 Process Each Row
+# 🚀 Process Each Entry
 # ---------------------
 for idx, (_, row) in enumerate(filtered_df.iterrows(), start=1):
     subscription_id = str(row['Subscription ID']).strip()
@@ -74,11 +76,9 @@ for idx, (_, row) in enumerate(filtered_df.iterrows(), start=1):
             results.append(entry)
             continue
 
-        # Extract Resource Group from ID
         rg_parts = vault_found.id.split('/')
         resource_group_name = rg_parts[rg_parts.index('resourceGroups') + 1]
 
-        # Get full vault details
         vault_details = client.vaults.get(resource_group_name, keyvault_name)
 
         entry["Resource Group"] = resource_group_name
@@ -96,21 +96,24 @@ for idx, (_, row) in enumerate(filtered_df.iterrows(), start=1):
 
     results.append(entry)
 
-# ---------------------
-# 📝 Write Output to Excel
-# ---------------------
-output_df = pd.DataFrame(results)
-output_df.to_excel(OUTPUT_FILE, index=False)
-print(f"\n📁 Output saved to: {OUTPUT_FILE}")
+    # 💾 Save intermediate results every N rows
+    if idx % SAVE_EVERY == 0:
+        pd.DataFrame(results).to_excel(PARTIAL_OUTPUT_FILE, index=False)
+        print(f"💾 Partial output saved at row {idx} → {PARTIAL_OUTPUT_FILE}")
 
 # ---------------------
-# ⏱️ Calculate & Print Execution Time (in hours, minutes, seconds)
+# 📝 Save Final Output
+# ---------------------
+pd.DataFrame(results).to_excel(OUTPUT_FILE, index=False)
+print(f"\n📁 Final output saved to: {OUTPUT_FILE}")
+
+# ---------------------
+# ⏱️ Execution Time in H:M:S
 # ---------------------
 elapsed = time.time() - start_time
 hours = int(elapsed // 3600)
 minutes = int((elapsed % 3600) // 60)
 seconds = round(elapsed % 60, 2)
+print(f"\n⏱️ Execution time: {hours} hours, {minutes} minutes, {seconds} seconds")
 
-time_str = f"{hours} hours, {minutes} minutes, {seconds} seconds"
-print(f"\n⏱️ Execution time: {time_str}")
 print("\n✅ Finished processing all filtered Key Vaults.")
