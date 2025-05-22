@@ -2,9 +2,8 @@ import os
 import pandas as pd
 import time
 from azure.identity import AzureCliCredential
-from azure.identity._exceptions import AzureCliCredentialAuthenticationError
-from azure.mgmt.keyvault import KeyVaultManagementClient
 from azure.core.exceptions import ClientAuthenticationError
+from azure.mgmt.keyvault import KeyVaultManagementClient
 
 # ---------------------
 # 📥 Config
@@ -14,15 +13,15 @@ SHEET_NAME = "Sheet1"
 POLICY_FILTER_VALUE = "123456"
 PARTIAL_OUTPUT_FILE = "keyvault_output_partial.xlsx"
 FINAL_OUTPUT_FILE = "keyvault_output.xlsx"
-SAVE_EVERY = 100
+SAVE_EVERY = 100  # Save progress every N rows
 
 # ---------------------
-# 🔐 Azure CLI Auth + Session Check
+# 🔐 Azure CLI Login Check
 # ---------------------
 try:
     credential = AzureCliCredential()
-    credential.get_token("https://management.azure.com/.default")  # check login
-except AzureCliCredentialAuthenticationError:
+    credential.get_token("https://management.azure.com/.default")  # proactively test login
+except ClientAuthenticationError:
     print("⚠️ Azure CLI session expired or not logged in.")
     print("👉 Please run 'az login' and rerun this script.")
     exit(1)
@@ -33,14 +32,14 @@ except AzureCliCredentialAuthenticationError:
 start_time = time.time()
 
 # ---------------------
-# 🧾 Load Input
+# 🧾 Load Input File and Filter
 # ---------------------
 df = pd.read_excel(INPUT_FILE, sheet_name=SHEET_NAME)
 df.columns = df.columns.str.strip()
 df['Policy ID'] = df['Policy ID'].apply(lambda x: str(x).strip())
 filtered_df = df[df['Policy ID'] == POLICY_FILTER_VALUE.strip()]
 
-print(f"\n📊 Total entries: {len(df)}")
+print(f"\n📊 Total entries in file: {len(df)}")
 print(f"🔎 Filtered rows with Policy ID = '{POLICY_FILTER_VALUE}': {len(filtered_df)}")
 
 if filtered_df.empty:
@@ -48,7 +47,7 @@ if filtered_df.empty:
     exit()
 
 # ---------------------
-# 📂 Load Partial Output (if exists) to Resume
+# 🔁 Resume Support: Load Partial Output
 # ---------------------
 processed_pairs = set()
 results = []
@@ -74,7 +73,7 @@ for idx, (_, row) in enumerate(filtered_df.iterrows(), start=1):
     pair_key = (keyvault_name.lower(), subscription_id.lower())
 
     if pair_key in processed_pairs:
-        continue  # skip already processed
+        continue
 
     print(f"\n🔍 [Processing {processed_count + 1} of {total}] Key Vault '{keyvault_name}' in subscription '{subscription_id}'")
 
@@ -111,11 +110,12 @@ for idx, (_, row) in enumerate(filtered_df.iterrows(), start=1):
             entry["Status"] = "Success"
             entry["Message"] = "Processed successfully"
             print(f"✅ {entry['Message']}")
+
     except ClientAuthenticationError:
         print(f"\n⛔ Azure CLI session expired during row {processed_count + 1} → Key Vault: '{keyvault_name}'")
         print("👉 Please run 'az login' and rerun the script.")
         pd.DataFrame(results).to_excel(PARTIAL_OUTPUT_FILE, index=False)
-        print(f"💾 Partial progress saved to: {PARTIAL_OUTPUT_FILE}")
+        print(f"💾 Progress saved to: {PARTIAL_OUTPUT_FILE}")
         exit(1)
     except Exception as e:
         entry["Status"] = "Failed"
@@ -126,7 +126,6 @@ for idx, (_, row) in enumerate(filtered_df.iterrows(), start=1):
     processed_pairs.add(pair_key)
     processed_count += 1
 
-    # 💾 Save partial every N rows
     if processed_count % SAVE_EVERY == 0:
         pd.DataFrame(results).to_excel(PARTIAL_OUTPUT_FILE, index=False)
         print(f"💾 Partial output saved at row {processed_count} → {PARTIAL_OUTPUT_FILE}")
