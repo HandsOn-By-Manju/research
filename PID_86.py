@@ -20,7 +20,7 @@ SAVE_EVERY = 100  # Save progress every N rows
 # ---------------------
 try:
     credential = AzureCliCredential()
-    credential.get_token("https://management.azure.com/.default")  # proactively test login
+    credential.get_token("https://management.azure.com/.default")
 except ClientAuthenticationError:
     print("⚠️ Azure CLI session expired or not logged in.")
     print("👉 Please run 'az login' and rerun this script.")
@@ -32,7 +32,7 @@ except ClientAuthenticationError:
 start_time = time.time()
 
 # ---------------------
-# 🧾 Load Input File and Filter
+# 🧾 Load and Filter Input
 # ---------------------
 df = pd.read_excel(INPUT_FILE, sheet_name=SHEET_NAME)
 df.columns = df.columns.str.strip()
@@ -47,7 +47,7 @@ if filtered_df.empty:
     exit(1)
 
 # ---------------------
-# 🔁 Resume Support: Load Partial Output
+# 🔁 Resume Support
 # ---------------------
 processed_pairs = set()
 results = []
@@ -58,21 +58,21 @@ if os.path.exists(PARTIAL_OUTPUT_FILE):
     for _, row in partial_df.iterrows():
         key = (row['Key Vault Name'].strip().lower(), row['Subscription ID'].strip().lower())
         processed_pairs.add(key)
-    print(f"🔁 Resuming: {len(processed_pairs)} Key Vaults already processed (from {PARTIAL_OUTPUT_FILE})")
+    print(f"🔁 Resuming from {len(processed_pairs)} processed vaults (partial file found).")
 
 # ---------------------
-# ⚡ Vault Cache per Subscription
+# ⚡ Cache vault listings per subscription
 # ---------------------
 vault_cache = {}
 
 def get_vault_from_cache(client, subscription_id, keyvault_name):
     if subscription_id not in vault_cache:
-        print(f"📦 Caching Key Vaults for subscription: {subscription_id}")
+        print(f"📦 Caching Key Vaults in subscription: {subscription_id}")
         vault_cache[subscription_id] = list(client.vaults.list())
     return next((v for v in vault_cache[subscription_id] if v.name.lower() == keyvault_name.lower()), None)
 
 # ---------------------
-# 🚀 Process Remaining Rows
+# 🚀 Process Vaults
 # ---------------------
 filtered_df = filtered_df.reset_index(drop=True)
 total = len(filtered_df)
@@ -86,7 +86,7 @@ for idx, (_, row) in enumerate(filtered_df.iterrows(), start=1):
     if pair_key in processed_pairs:
         continue
 
-    print(f"\n🔍 [Processing {processed_count + 1} of {total}] Key Vault '{keyvault_name}' in subscription '{subscription_id}'")
+    print(f"\n🔍 [Processing {processed_count + 1} of {total}] '{keyvault_name}' in subscription '{subscription_id}'")
 
     entry = {
         "Index": processed_count + 1,
@@ -102,17 +102,19 @@ for idx, (_, row) in enumerate(filtered_df.iterrows(), start=1):
 
     try:
         client = KeyVaultManagementClient(credential, subscription_id)
-        vault_found = get_vault_from_cache(client, subscription_id, keyvault_name)
+        vault_reference = get_vault_from_cache(client, subscription_id, keyvault_name)
 
-        if not vault_found:
+        if not vault_reference:
             entry["Status"] = "Failed"
             entry["Message"] = "Key Vault not found"
             print(f"❌ {entry['Message']}")
         else:
-            rg_parts = vault_found.id.split('/')
+            rg_parts = vault_reference.id.split('/')
             resource_group_name = rg_parts[rg_parts.index('resourceGroups') + 1]
 
-            network_acls = vault_found.properties.network_acls
+            # ✅ Fetch full vault details
+            vault_details = client.vaults.get(resource_group_name, keyvault_name)
+            network_acls = vault_details.properties.network_acls
             default_action = network_acls.default_action if network_acls else "Unknown"
             bypass = network_acls.bypass if network_acls else "Unknown"
             firewall_enabled = "Yes ✅" if default_action == "Deny" else "No ❌"
@@ -126,8 +128,8 @@ for idx, (_, row) in enumerate(filtered_df.iterrows(), start=1):
             print(f"✅ {entry['Message']}")
 
     except ClientAuthenticationError:
-        print(f"\n⛔ Azure CLI session expired during row {processed_count + 1} → Key Vault: '{keyvault_name}'")
-        print("👉 Please run 'az login' and rerun the script.")
+        print(f"\n⛔ Azure CLI session expired at row {processed_count + 1} → '{keyvault_name}'")
+        print("👉 Run 'az login' and rerun the script.")
         pd.DataFrame(results).to_excel(PARTIAL_OUTPUT_FILE, index=False)
         print(f"💾 Progress saved to: {PARTIAL_OUTPUT_FILE}")
         exit(1)
