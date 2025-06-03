@@ -3,22 +3,19 @@ import os
 import time
 
 # === CONFIGURATION ===
-csv_file_path = 'input_data.csv'               # Input CSV file path
-excel_file_path = 'output_data.xlsx'           # Output Excel file path
+csv_file_path = 'input_data.csv'               # Input CSV path
+excel_file_path = 'output_data.xlsx'           # Output Excel path
 
-# Rename columns: {old_column_name: new_column_name}
 columns_to_rename = {
     'EmpName': 'Employee Name',
     'Dept': 'Department'
 }
 
-# Add new columns with default values: {new_column_name: default_value}
 columns_to_add = {
     'Reviewed': 'No',
     'Reviewer': ''
 }
 
-# Columns to split: {column_to_split: {'delimiter': str, 'new_columns': [new_col1, new_col2]}}
 columns_to_split = {
     'Location': {
         'delimiter': ',',
@@ -30,29 +27,31 @@ columns_to_split = {
     }
 }
 
-# Desired column order (only included columns will be reordered)
 desired_column_order = [
-    'Employee Name', 'Department', 'City', 'State', 'FirstName', 'LastName',
-    'Reviewed', 'Reviewer'
+    'Employee Name', 'Department', 'City', 'State', 'FirstName', 'LastName', 'Reviewed', 'Reviewer'
 ]
 
-# Columns to remove (AFTER all above steps)
-columns_to_remove = ['UnwantedCol1', 'UnwantedCol2']  # Adjust as needed
+columns_to_remove = ['UnwantedCol1', 'UnwantedCol2']
+
+# Rows to remove based on filter: {column_name: [value1, value2]}
+rows_to_filter_out = {
+    'Department': ['HR', 'Finance'],
+    'Reviewed': ['No']
+}
 
 # === START TIMER ===
 start_time = time.time()
 
-# === FILE CHECK ===
 if not os.path.isfile(csv_file_path):
     print(f"❌ File not found: {csv_file_path}")
 else:
     try:
-        # === LOAD CSV ===
+        # === READ CSV ===
         df = pd.read_csv(csv_file_path)
-        print(f"\n✅ Loaded CSV file: {csv_file_path}")
+        print(f"\n✅ Loaded CSV: {csv_file_path}")
 
-        # === LIST COLUMNS ===
-        print("\n📋 Original Columns:")
+        # === LIST ORIGINAL COLUMNS ===
+        print("\n📋 Columns in file:")
         for col in df.columns:
             print(f" - {col}")
         print(f"🧮 Total columns: {len(df.columns)}")
@@ -64,24 +63,43 @@ else:
             print(f" - {old} → {new}")
 
         # === ADD NEW COLUMNS ===
-        for col, default in columns_to_add.items():
-            df[col] = default
+        for col, default_val in columns_to_add.items():
+            df[col] = default_val
         print("\n➕ Added Columns:")
         for col in columns_to_add:
             print(f" - {col} (Default: {columns_to_add[col]})")
 
         # === SPLIT COLUMNS ===
         print("\n🔀 Splitting Columns:")
-        for col, config in columns_to_split.items():
+        for col, cfg in columns_to_split.items():
             if col in df.columns:
-                split_cols = df[col].astype(str).str.split(config['delimiter'], n=1, expand=True)
-                if len(split_cols.columns) < 2:
-                    split_cols[1] = ''
-                split_cols.columns = config['new_columns']
-                df = pd.concat([df, split_cols], axis=1)
-                print(f" - {col} → {config['new_columns'][0]}, {config['new_columns'][1]}")
+                split_df = df[col].astype(str).str.split(cfg['delimiter'], n=1, expand=True)
+                if len(split_df.columns) < 2:
+                    split_df[1] = ''
+                split_df.columns = cfg['new_columns']
+                df = pd.concat([df, split_df], axis=1)
+                print(f" - {col} → {cfg['new_columns'][0]}, {cfg['new_columns'][1]}")
             else:
-                print(f" ⚠️ Column '{col}' not found to split")
+                print(f" ⚠️ Column '{col}' not found for splitting.")
+
+        # === REMOVE SPECIFIC COLUMNS ===
+        to_remove = [col for col in columns_to_remove if col in df.columns]
+        df.drop(columns=to_remove, inplace=True)
+        if to_remove:
+            print("\n🗑️ Removed Columns:")
+            for col in to_remove:
+                print(f" - {col}")
+
+        # === FILTER ROWS OUT BASED ON COLUMN VALUES ===
+        print("\n🚫 Filtering Rows:")
+        for col, values in rows_to_filter_out.items():
+            if col in df.columns:
+                before = len(df)
+                df = df[~df[col].isin(values)]
+                after = len(df)
+                print(f" - Removed {before - after} rows where '{col}' in {values}")
+            else:
+                print(f" ⚠️ Column '{col}' not found for filtering.")
 
         # === REORDER COLUMNS ===
         reordered = [col for col in desired_column_order if col in df.columns]
@@ -91,17 +109,9 @@ else:
         for col in df.columns:
             print(f" - {col}")
 
-        # === REMOVE COLUMNS ===
-        removable = [col for col in columns_to_remove if col in df.columns]
-        df.drop(columns=removable, inplace=True)
-        if removable:
-            print("\n🗑️ Removed Columns:")
-            for col in removable:
-                print(f" - {col}")
-
-        # === EXPORT TO EXCEL ===
+        # === SAVE TO EXCEL ===
         df.to_excel(excel_file_path, index=False)
-        print(f"\n💾 File saved to: {excel_file_path}")
+        print(f"\n💾 Excel saved: {excel_file_path}")
 
     except Exception as e:
         print(f"❌ Error: {e}")
