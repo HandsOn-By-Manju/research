@@ -15,3 +15,9 @@ mail.Body = 'Hello,\n\nThis is an automated email sent from Python using Outlook
 mail.Send()
 
 print("Email sent successfully.")
+
+
+
+
+
+python -c "import win32com.client; print('pywin32 available')"
