@@ -41,32 +41,32 @@ rows_to_filter_out = {
     'Department': ['HR', 'Finance']
 }
 
-# Reference match + value copy: match column, and {reference_column: destination_column_in_df}
-reference_match_column = 'Employee ID'
-input_column_to_match = 'EmpID'
-reference_fill_map = {
-    'Manager': 'Manager'  # Copy Manager from reference to Manager column in df
-}
+# Reference matching based on 'Policy ID'
+policy_id_column_input = 'Policy ID'
+policy_id_column_reference = 'Policy ID'
+reference_fields_to_copy = ['Policy Statement', 'Policy Remediation']
 
-# Desired final column order
+# Final desired column order in output
 desired_column_order = [
     'Employee Name', 'EmpID', 'Department', 'City', 'State',
-    'FirstName', 'LastName', 'Reviewed', 'Reviewer', 'Manager'
+    'FirstName', 'LastName', 'Policy ID', 'Policy Statement',
+    'Policy Remediation', 'Reviewed', 'Reviewer'
 ]
 
-# === EXECUTION START ===
+# === START TIMER ===
 start_time = time.time()
 
-# === FILE CHECK ===
+# === FILE VALIDATION ===
 if not os.path.exists(csv_file_path):
     raise FileNotFoundError(f"Input CSV not found: {csv_file_path}")
 if not os.path.exists(reference_excel_path):
     raise FileNotFoundError(f"Reference Excel not found: {reference_excel_path}")
 
-# === LOAD FILES ===
+# === LOAD DATA ===
 df = pd.read_csv(csv_file_path)
 ref_df = pd.read_excel(reference_excel_path)
 
+# === LIST ORIGINAL COLUMNS ===
 print("\n📋 Columns in Input File:")
 for col in df.columns:
     print(f" - {col}")
@@ -89,7 +89,7 @@ for col, cfg in columns_to_split.items():
     else:
         print(f"⚠️ Column '{col}' not found for splitting")
 
-# === REMOVE COLUMNS ===
+# === REMOVE UNWANTED COLUMNS ===
 df.drop(columns=[col for col in columns_to_remove if col in df.columns], inplace=True)
 
 # === FILTER OUT ROWS ===
@@ -102,26 +102,22 @@ for col, values in rows_to_filter_out.items():
     else:
         print(f"⚠️ Column '{col}' not found for filtering")
 
-# === ENRICH EXISTING COLUMNS USING REFERENCE FILE ===
-if reference_match_column in ref_df.columns and input_column_to_match in df.columns:
-    ref_subset = ref_df[[reference_match_column] + list(reference_fill_map.keys())]
-    df = df.merge(ref_subset, how='left', left_on=input_column_to_match, right_on=reference_match_column)
-
-    # Fill mapped values and drop the reference column
-    for ref_col, target_col in reference_fill_map.items():
-        if ref_col in df.columns:
-            df[target_col] = df[ref_col]
-            if ref_col != target_col:
-                df.drop(columns=[ref_col], inplace=True)
-    if reference_match_column in df.columns:
-        df.drop(columns=[reference_match_column], inplace=True)
+# === ENRICH USING 'Policy ID' MATCH ===
+if policy_id_column_input in df.columns and policy_id_column_reference in ref_df.columns:
+    enrichment_df = ref_df[[policy_id_column_reference] + reference_fields_to_copy]
+    df = df.merge(enrichment_df, how='left',
+                  left_on=policy_id_column_input,
+                  right_on=policy_id_column_reference)
+    if policy_id_column_reference != policy_id_column_input:
+        df.drop(columns=[policy_id_column_reference], inplace=True)
+    print(f"🔗 Enriched with {reference_fields_to_copy} using '{policy_id_column_input}' match")
 else:
-    print("⚠️ Enrichment skipped: Matching columns not found")
+    print("⚠️ 'Policy ID' column not found in input or reference")
 
 # === REORDER COLUMNS ===
-reordered_cols = [col for col in desired_column_order if col in df.columns]
-remaining_cols = [col for col in df.columns if col not in reordered_cols]
-df = df[reordered_cols + remaining_cols]
+final_columns = [col for col in desired_column_order if col in df.columns]
+remaining_columns = [col for col in df.columns if col not in final_columns]
+df = df[final_columns + remaining_columns]
 
 print("\n📐 Final Column Order:")
 for col in df.columns:
@@ -129,7 +125,7 @@ for col in df.columns:
 
 # === SAVE TO EXCEL ===
 df.to_excel(excel_output_path, index=False)
-print(f"\n✅ Excel saved: {excel_output_path}")
+print(f"\n✅ Output Excel saved to: {excel_output_path}")
 
 # === EXECUTION TIME ===
 end_time = time.time()
