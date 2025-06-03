@@ -5,7 +5,6 @@ from datetime import datetime
 from pathlib import Path
 
 # === CONFIGURATION ===
-
 csv_file_path = 'input_data.csv'
 reference_excel_path = 'reference.xlsx'
 history_file = 'issue_history.xlsx'
@@ -30,34 +29,37 @@ desired_column_order = [
 ]
 key_columns = ['EmpID', 'Policy ID']
 
-# === START TIMER ===
+print("=== Script started ===")
 start_time = time.time()
 
 # === LOAD FILES ===
-if not os.path.exists(csv_file_path):
-    raise FileNotFoundError(f"Missing input file: {csv_file_path}")
-if not os.path.exists(reference_excel_path):
-    raise FileNotFoundError(f"Missing reference file: {reference_excel_path}")
-
+print(f"Reading input file: {csv_file_path}")
 df = pd.read_csv(csv_file_path)
+
+print(f"Reading reference file: {reference_excel_path}")
 ref_df = pd.read_excel(reference_excel_path)
 
 # === TYPE NORMALIZATION ===
+print("Normalizing types for merge columns...")
 df[policy_id_column] = df[policy_id_column].astype(str)
 ref_df[policy_id_column] = ref_df[policy_id_column].astype(str)
 for key in key_columns:
     df[key] = df[key].astype(str)
 
 # === RENAME COLUMNS ===
+print("Renaming columns...")
 df.rename(columns=columns_to_rename, inplace=True)
 
 # === ADD NEW COLUMNS ===
+print("Adding new columns...")
 for col, val in columns_to_add.items():
     df[col] = val
 
 # === SPLIT COLUMNS ===
+print("Splitting configured columns...")
 for col, cfg in columns_to_split.items():
     if col in df.columns:
+        print(f" - Splitting '{col}' into {cfg['new_columns']}")
         split_df = df[col].astype(str).str.split(cfg['delimiter'], n=1, expand=True)
         if len(split_df.columns) < 2:
             split_df[1] = ''
@@ -65,25 +67,32 @@ for col, cfg in columns_to_split.items():
         df = pd.concat([df, split_df], axis=1)
 
 # === REMOVE UNNEEDED COLUMNS ===
+print("Removing unwanted columns...")
 df.drop(columns=[col for col in columns_to_remove if col in df.columns], inplace=True)
 
 # === FILTER ROWS ===
+print("Filtering rows based on configured conditions...")
 for col, values in rows_to_filter_out.items():
     if col in df.columns:
+        original_len = len(df)
         df = df[~df[col].isin(values)]
+        print(f" - Removed {original_len - len(df)} rows from column '{col}'")
 
-# === ENRICH WITH POLICY DATA ===
+# === ENRICH DATA ===
+print("Enriching data from reference file...")
 if policy_id_column in df.columns and policy_id_column in ref_df.columns:
     enrichment_df = ref_df[[policy_id_column] + reference_fields_to_enrich]
     df = df.merge(enrichment_df, how='left', on=policy_id_column)
 
-# === ADD TRACKING COLUMNS ===
+# === TRACKING COLUMNS ===
+print("Adding tracking columns...")
 df['Issue Creation Date'] = today_str
 df['Status'] = 'Open'
 df['Closed Date'] = ''
 
-# === ISSUE LIFECYCLE MANAGEMENT ===
+# === HANDLE ISSUE HISTORY ===
 if Path(history_file).exists():
+    print("Existing issue history found. Comparing...")
     history_df = pd.read_excel(history_file)
     for key in key_columns:
         history_df[key] = history_df[key].astype(str)
@@ -93,7 +102,6 @@ if Path(history_file).exists():
 
     for _, row in merged.iterrows():
         if pd.notna(row.get('Status_old')) and pd.isna(row.get('Status')):
-            # Closed issue: copy *_old values into base columns
             for col in merged.columns:
                 if col.endswith('_old'):
                     base_col = col.replace('_old', '')
@@ -105,11 +113,9 @@ if Path(history_file).exists():
             rows.append(row.to_dict())
 
         elif pd.isna(row.get('Status_old')) and pd.notna(row.get('Status')):
-            # New issue
             rows.append(row.to_dict())
 
         elif pd.notna(row.get('Status_old')) and pd.notna(row.get('Status')):
-            # Still open
             row['Issue Creation Date'] = row['Issue Creation Date_old']
             row['Status'] = 'Open'
             row['Closed Date'] = ''
@@ -118,28 +124,33 @@ if Path(history_file).exists():
     final_df = pd.DataFrame(rows)
     final_df.drop(columns=[col for col in final_df.columns if col.endswith('_old')], inplace=True)
 else:
+    print("No previous issue history. This is the first run.")
     final_df = df.copy()
 
 # === REORDER COLUMNS ===
+print("Reordering columns...")
 ordered = [col for col in desired_column_order if col in final_df.columns]
 remaining = [col for col in final_df.columns if col not in ordered]
 final_df = final_df[ordered + remaining]
 
-# === SAVE TO FILES ===
+# === SAVE OUTPUT ===
+print(f"Saving final report to: {output_excel_path}")
 final_df.to_excel(output_excel_path, index=False)
+
+print(f"Updating issue history file: {history_file}")
 final_df.to_excel(history_file, index=False)
 
 # === EXECUTION TIME ===
 end_time = time.time()
 duration = end_time - start_time
-
-# === DISPLAY TIME ===
 if duration < 60:
     print(f"Execution time: {duration:.2f} seconds")
 elif duration < 3600:
-    print(f"Execution time: {int(duration // 60)} minutes {duration % 60:.2f} seconds")
+    print(f"Execution time: {int(duration // 60)} min {duration % 60:.2f} sec")
 else:
     h = int(duration // 3600)
     m = int((duration % 3600) // 60)
     s = duration % 60
-    print(f"Execution time: {h} hours {m} minutes {s:.2f} seconds")
+    print(f"Execution time: {h} hr {m} min {s:.2f} sec")
+
+print("=== Script completed successfully ===")
