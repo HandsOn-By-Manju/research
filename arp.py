@@ -3,21 +3,22 @@ import os
 import time
 
 # === CONFIGURATION ===
-csv_file_path = 'input_data.csv'               # Input CSV
-excel_file_path = 'output_data.xlsx'           # Output Excel
+csv_file_path = 'input_data.csv'               # Input CSV file path
+excel_file_path = 'output_data.xlsx'           # Output Excel file path
 
+# Rename columns: {old_column_name: new_column_name}
 columns_to_rename = {
     'EmpName': 'Employee Name',
     'Dept': 'Department'
 }
 
-columns_to_remove = ['Age', 'Salary']  # Columns to remove
-
+# Add new columns with default values: {new_column_name: default_value}
 columns_to_add = {
     'Reviewed': 'No',
     'Reviewer': ''
 }
 
+# Columns to split: {column_to_split: {'delimiter': str, 'new_columns': [new_col1, new_col2]}}
 columns_to_split = {
     'Location': {
         'delimiter': ',',
@@ -29,24 +30,29 @@ columns_to_split = {
     }
 }
 
-desired_column_order = [  # Final column order in Excel
+# Desired column order (only included columns will be reordered)
+desired_column_order = [
     'Employee Name', 'Department', 'City', 'State', 'FirstName', 'LastName',
     'Reviewed', 'Reviewer'
 ]
 
+# Columns to remove (AFTER all above steps)
+columns_to_remove = ['UnwantedCol1', 'UnwantedCol2']  # Adjust as needed
+
 # === START TIMER ===
 start_time = time.time()
 
+# === FILE CHECK ===
 if not os.path.isfile(csv_file_path):
     print(f"❌ File not found: {csv_file_path}")
 else:
     try:
-        # === LOAD CSV FILE ===
+        # === LOAD CSV ===
         df = pd.read_csv(csv_file_path)
         print(f"\n✅ Loaded CSV file: {csv_file_path}")
 
-        # === LIST ORIGINAL COLUMNS ===
-        print("\n📌 Original Columns:")
+        # === LIST COLUMNS ===
+        print("\n📋 Original Columns:")
         for col in df.columns:
             print(f" - {col}")
         print(f"🧮 Total columns: {len(df.columns)}")
@@ -56,13 +62,6 @@ else:
         print("\n✏️ Renamed Columns:")
         for old, new in columns_to_rename.items():
             print(f" - {old} → {new}")
-
-        # === REMOVE COLUMNS ===
-        removable = [col for col in columns_to_remove if col in df.columns]
-        df.drop(columns=removable, inplace=True)
-        print("\n🗑️ Removed Columns:")
-        for col in removable:
-            print(f" - {col}")
 
         # === ADD NEW COLUMNS ===
         for col, default in columns_to_add.items():
@@ -82,26 +81,32 @@ else:
                 df = pd.concat([df, split_cols], axis=1)
                 print(f" - {col} → {config['new_columns'][0]}, {config['new_columns'][1]}")
             else:
-                print(f" ⚠️ Column '{col}' not found for splitting.")
+                print(f" ⚠️ Column '{col}' not found to split")
 
-        # === REARRANGE COLUMNS ===
-        existing_order = [col for col in desired_column_order if col in df.columns]
-        remaining_cols = [col for col in df.columns if col not in existing_order]
-        final_order = existing_order + remaining_cols
-        df = df[final_order]
-
+        # === REORDER COLUMNS ===
+        reordered = [col for col in desired_column_order if col in df.columns]
+        remaining = [col for col in df.columns if col not in reordered]
+        df = df[reordered + remaining]
         print("\n📐 Final Column Order:")
-        for col in final_order:
+        for col in df.columns:
             print(f" - {col}")
+
+        # === REMOVE COLUMNS ===
+        removable = [col for col in columns_to_remove if col in df.columns]
+        df.drop(columns=removable, inplace=True)
+        if removable:
+            print("\n🗑️ Removed Columns:")
+            for col in removable:
+                print(f" - {col}")
 
         # === EXPORT TO EXCEL ===
         df.to_excel(excel_file_path, index=False)
-        print(f"\n📁 Saved to Excel: {excel_file_path}")
+        print(f"\n💾 File saved to: {excel_file_path}")
 
     except Exception as e:
-        print(f"❌ Error occurred: {e}")
+        print(f"❌ Error: {e}")
 
-# === END TIMER & EXECUTION TIME ===
+# === END TIMER ===
 end_time = time.time()
 duration = end_time - start_time
 
@@ -111,7 +116,7 @@ if duration < 60:
 elif duration < 3600:
     print(f" - {int(duration // 60)} minutes {duration % 60:.2f} seconds")
 else:
-    hours = int(duration // 3600)
-    minutes = int((duration % 3600) // 60)
-    seconds = duration % 60
-    print(f" - {hours} hours {minutes} minutes {seconds:.2f} seconds")
+    h = int(duration // 3600)
+    m = int((duration % 3600) // 60)
+    s = duration % 60
+    print(f" - {h} hours {m} minutes {s:.2f} seconds")
