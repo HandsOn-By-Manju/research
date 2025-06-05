@@ -74,7 +74,7 @@ def extract_vnet_subnet_name(vnet_rule_id):
         subnet = parts[parts.index('subnets') + 1]
         return f"{vnet}/{subnet}"
     except Exception:
-        return vnet_rule_id  # fallback to full ID if parsing fails
+        return vnet_rule_id
 
 for idx, (_, row) in enumerate(filtered_df.iterrows(), start=1):
     sub_id = str(row['Subscription ID']).strip()
@@ -120,13 +120,16 @@ for idx, (_, row) in enumerate(filtered_df.iterrows(), start=1):
             ip_rules = props.ip_rules or []
             vnet_rules = props.virtual_network_rules or []
 
+            ip_list = [r.ip_address_or_range for r in ip_rules]
+            contains_open_ip = "0.0.0.0" in ip_list
+
             entry["Public Network Access"] = public_access
             entry["IP Rules Count"] = len(ip_rules)
-            entry["IP Rule Details"] = ", ".join([r.ip_address_or_range for r in ip_rules])
+            entry["IP Rule Details"] = ", ".join(ip_list)
             entry["VNet Rules Count"] = len(vnet_rules)
             entry["VNet Rule Details"] = ", ".join([extract_vnet_subnet_name(r.id) for r in vnet_rules if r.id])
 
-            if public_access == "Enabled" and len(ip_rules) == 0 and len(vnet_rules) == 0:
+            if public_access == "Enabled" and (contains_open_ip or (len(ip_rules) == 0 and len(vnet_rules) == 0)):
                 entry["Exposed to All Networks?"] = "Yes 🌐"
             else:
                 entry["Exposed to All Networks?"] = "No 🔒"
