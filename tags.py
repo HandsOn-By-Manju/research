@@ -8,7 +8,7 @@ from openpyxl import Workbook
 # Start execution timer
 start_time = time.time()
 
-# Authenticate using Azure CLI
+# Authenticate
 print("[INFO] Authenticating using Azure CLI credentials...")
 credential = AzureCliCredential()
 sub_client = SubscriptionClient(credential)
@@ -19,19 +19,20 @@ resource_groups_data = []
 subscription_tag_keys = set()
 rg_tag_keys = set()
 
-print("[INFO] Starting tag collection from all subscriptions...\n")
+print("[INFO] Fetching all subscriptions...\n")
+subscriptions = list(sub_client.subscriptions.list())
+total_subs = len(subscriptions)
 
-# Loop through subscriptions
-for sub in sub_client.subscriptions.list():
+for sub_index, sub in enumerate(subscriptions, start=1):
     sub_id = sub.subscription_id
     sub_name = sub.display_name
-    print(f"🔍 Processing Subscription: {sub_name} ({sub_id})")
+    print(f"🔍 Processing Subscription {sub_index} of {total_subs}: {sub_name} ({sub_id})")
 
     # Subscription tags
     sub_details = sub_client.subscriptions.get(sub_id)
     sub_tags = sub_details.tags or {}
     if sub_tags:
-        print(f"    ✅ Subscription has {len(sub_tags)} tag(s)")
+        print(f"    ✅ Found {len(sub_tags)} tag(s)")
     else:
         print(f"    ⚠️  No tags found on this subscription")
 
@@ -45,25 +46,29 @@ for sub in sub_client.subscriptions.list():
     # Initialize Resource Client
     resource_client = ResourceManagementClient(credential, sub_id)
 
-    # Loop through Resource Groups
     rg_list = list(resource_client.resource_groups.list())
+    total_rgs = len(rg_list)
+
     if not rg_list:
-        print("    ℹ️  No resource groups found.")
+        print("    ℹ️  No resource groups found.\n")
         continue
 
-    print(f"    ➕ Found {len(rg_list)} resource group(s)")
-    for rg in rg_list:
+    print(f"    ➕ Found {total_rgs} resource group(s)")
+
+    for rg_index, rg in enumerate(rg_list, start=1):
         rg_name = rg.name
         rg_location = rg.location
+        print(f"        📁 Processing Resource Group {rg_index} of {total_rgs}: {rg_name}")
+
         rg_details = resource_client.resource_groups.get(rg_name)
         rg_tags = rg_details.tags or {}
+
         if rg_tags:
-            print(f"        ✅ RG '{rg_name}' has {len(rg_tags)} tag(s)")
+            print(f"            ✅ Found {len(rg_tags)} tag(s)")
         else:
-            print(f"        ⚠️  RG '{rg_name}' has no tags")
+            print(f"            ⚠️  No tags found")
 
         rg_tag_keys.update(rg_tags.keys())
-
         resource_groups_data.append({
             "Subscription Name": sub_name,
             "Subscription ID": sub_id,
@@ -72,11 +77,11 @@ for sub in sub_client.subscriptions.list():
             **rg_tags
         })
 
-# Function to write data to a sheet
-def write_sheet(wb, sheet_name, data, extra_columns, tag_keys):
+# Function to write Excel sheet
+def write_sheet(wb, sheet_name, data, base_columns, tag_keys):
     ws = wb.create_sheet(sheet_name)
     tag_keys_sorted = sorted(tag_keys)
-    headers = extra_columns + tag_keys_sorted
+    headers = base_columns + tag_keys_sorted
     ws.append(headers)
     for item in data:
         row = [item.get(col, "") for col in headers]
