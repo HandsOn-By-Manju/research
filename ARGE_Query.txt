@@ -1,36 +1,32 @@
 Resources
-| where type == "microsoft.network/publicipaddresses"
-| extend ipAssigned = isempty(properties.ipConfiguration.id)
-| where ipAssigned == true
-| project
-    name,
-    type,
+| where type == "microsoft.keyvault/vaults"
+| extend 
+    vaultName = name,
+    privateEndpointConnections = properties.privateEndpointConnections
+| where isempty(privateEndpointConnections)
+| project 
+    vaultName,
     id,
+    type,
     subscriptionId,
     resourceGroup,
     location,
-    tags,
-    sku,
-    zones,
-    properties.*
-
-
-Resources
-| where type == "microsoft.keyvault/vaults"
-| extend
-    vaultName = name,
-    networkAcls = properties.networkAcls,
+    // Access Control
+    rbacEnabled = properties.enableRbacAuthorization,
+    accessPolicies = properties.accessPolicies,
+    tenantId = tostring(properties.tenantId),
+    // Networking
+    publicNetworkAccess = tostring(properties.publicNetworkAccess),
     defaultAction = tostring(properties.networkAcls.defaultAction),
-    bypass = tostring(properties.networkAcls.bypass)
-| where defaultAction == "Allow"
-| project subscriptionId, resourceGroup, vaultName, location, defaultAction, bypass
-
-
-Resources
-| where type == "microsoft.keyvault/vaults"
-| extend
-    vaultName = name,
-    privateEndpoints = properties.privateEndpointConnections
-| where isempty(privateEndpoints)
-| project subscriptionId, resourceGroup, vaultName, location
-
+    bypass = tostring(properties.networkAcls.bypass),
+    ipRules = properties.networkAcls.ipRules,
+    vnetRules = properties.networkAcls.virtualNetworkRules,
+    // Security
+    enableSoftDelete = tostring(properties.enableSoftDelete),
+    enablePurgeProtection = tostring(properties.enablePurgeProtection),
+    // Configuration
+    vaultUri = tostring(properties.vaultUri),
+    skuName = sku.name,
+    skuFamily = sku.family,
+    // Tags
+    tags
