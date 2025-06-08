@@ -13,3 +13,14 @@ Resources
     sku,
     zones,
     properties.*
+
+
+Resources
+| where type == "microsoft.keyvault/vaults"
+| extend
+    vaultName = name,
+    networkAcls = properties.networkAcls,
+    defaultAction = tostring(properties.networkAcls.defaultAction),
+    bypass = tostring(properties.networkAcls.bypass)
+| where defaultAction == "Allow"
+| project subscriptionId, resourceGroup, vaultName, location, defaultAction, bypass
