@@ -1,107 +1,134 @@
+import pandas as pd
 import os
 import time
-from datetime import datetime
 from azure.identity import AzureCliCredential
+from azure.core.exceptions import ClientAuthenticationError, HttpResponseError
 from azure.mgmt.resource import SubscriptionClient, ResourceManagementClient
-from openpyxl import Workbook
 
-# Start execution timer
+# ---------------------
+# 📥 Config
+# ---------------------
+PARTIAL_FILE = "azure_tags_partial.xlsx"
+FINAL_FILE = "azure_subscription_and_rg_tags.xlsx"
+
+# ---------------------
+# ⏱️ Timer Start
+# ---------------------
 start_time = time.time()
 
-# Authenticate
-print("[INFO] Authenticating using Azure CLI credentials...")
-credential = AzureCliCredential()
+# ---------------------
+# 🔐 Azure CLI Login Check
+# ---------------------
+try:
+    credential = AzureCliCredential()
+    credential.get_token("https://management.azure.com/.default")
+except ClientAuthenticationError:
+    raise SystemExit("⚠️ Azure CLI session expired. Please run 'az login' and rerun this script.")
+
+# ---------------------
+# 🔁 Load Partial Output if Exists
+# ---------------------
+if os.path.exists(PARTIAL_FILE):
+    partial_df = pd.read_excel(PARTIAL_FILE, sheet_name=None)
+    subscription_data = partial_df.get("Subscription Tags", pd.DataFrame()).to_dict("records")
+    rg_tag_data = partial_df.get("Resource Group Tags", pd.DataFrame()).to_dict("records")
+    processed_subs = {row["Subscription ID"] for row in subscription_data}
+    print(f"🔁 Resuming from {len(processed_subs)} subscriptions")
+else:
+    subscription_data = []
+    rg_tag_data = []
+    processed_subs = set()
+
+# ---------------------
+# 🔁 Retry Helper
+# ---------------------
+def retry_call(func, retries=3, delay=5):
+    for attempt in range(retries):
+        try:
+            return func()
+        except HttpResponseError as e:
+            print(f"⏳ Retry {attempt+1}/{retries} - {e}")
+            time.sleep(delay)
+    raise
+
+# ---------------------
+# 📦 Process Subscriptions and RG Tags
+# ---------------------
 sub_client = SubscriptionClient(credential)
+all_subs = list(sub_client.subscriptions.list())
+total_subs = len(all_subs)
+total_rgs = 0
 
-# Data holders
-subscriptions_data = []
-resource_groups_data = []
-subscription_tag_keys = set()
-rg_tag_keys = set()
-
-print("[INFO] Fetching all subscriptions...\n")
-subscriptions = list(sub_client.subscriptions.list())
-total_subs = len(subscriptions)
-
-for sub_index, sub in enumerate(subscriptions, start=1):
+for idx, sub in enumerate(all_subs, start=1):
     sub_id = sub.subscription_id
     sub_name = sub.display_name
-    print(f"🔍 Processing Subscription {sub_index} of {total_subs}: {sub_name} ({sub_id})")
 
-    # Subscription tags
-    sub_details = sub_client.subscriptions.get(sub_id)
-    sub_tags = sub_details.tags or {}
-    if sub_tags:
-        print(f"    ✅ Found {len(sub_tags)} tag(s)")
-    else:
-        print(f"    ⚠️  No tags found on this subscription")
-
-    subscription_tag_keys.update(sub_tags.keys())
-    subscriptions_data.append({
-        "Subscription Name": sub_name,
-        "Subscription ID": sub_id,
-        **sub_tags
-    })
-
-    # Initialize Resource Client
-    resource_client = ResourceManagementClient(credential, sub_id)
-
-    rg_list = list(resource_client.resource_groups.list())
-    total_rgs = len(rg_list)
-
-    if not rg_list:
-        print("    ℹ️  No resource groups found.\n")
+    if sub_id in processed_subs:
         continue
 
-    print(f"    ➕ Found {total_rgs} resource group(s)")
+    print(f"\n🔍 [{idx} of {total_subs}] Processing subscription: {sub_name} ({sub_id})")
 
-    for rg_index, rg in enumerate(rg_list, start=1):
-        rg_name = rg.name
-        rg_location = rg.location
-        print(f"        📁 Processing Resource Group {rg_index} of {total_rgs}: {rg_name}")
+    sub_entry = {
+        "Subscription ID": sub_id,
+        "Subscription Name": sub_name,
+        "Tags": "",
+        "Message": ""
+    }
 
-        rg_details = resource_client.resource_groups.get(rg_name)
-        rg_tags = rg_details.tags or {}
+    try:
+        sub_details = retry_call(lambda: sub_client.subscriptions.get(sub_id))
+        if sub_details.tags:
+            sub_entry["Tags"] = ", ".join(f"{k}={v}" for k, v in sub_details.tags.items())
+        sub_entry["Message"] = "Success"
+    except Exception as e:
+        sub_entry["Tags"] = "ERROR"
+        sub_entry["Message"] = str(e)
 
-        if rg_tags:
-            print(f"            ✅ Found {len(rg_tags)} tag(s)")
-        else:
-            print(f"            ⚠️  No tags found")
+    subscription_data.append(sub_entry)
 
-        rg_tag_keys.update(rg_tags.keys())
-        resource_groups_data.append({
-            "Subscription Name": sub_name,
+    try:
+        rg_client = ResourceManagementClient(credential, sub_id)
+        rgs = list(rg_client.resource_groups.list())
+        print(f"📁   Found {len(rgs)} resource groups in {sub_name}")
+        for rg_idx, rg in enumerate(rgs, start=1):
+            rg_tags = rg.tags or {}
+            print(f"📦     - [{rg_idx} of {len(rgs)}] {rg.name}")
+            rg_tag_data.append({
+                "Subscription ID": sub_id,
+                "Subscription Name": sub_name,
+                "Resource Group": rg.name,
+                "Location": rg.location,
+                "Tags": ", ".join(f"{k}={v}" for k, v in rg_tags.items()) if rg_tags else "",
+                "Message": "Success"
+            })
+        total_rgs += len(rgs)
+    except Exception as e:
+        rg_tag_data.append({
             "Subscription ID": sub_id,
-            "Resource Group": rg_name,
-            "Location": rg_location,
-            **rg_tags
+            "Subscription Name": sub_name,
+            "Resource Group": "ERROR",
+            "Location": "",
+            "Tags": "",
+            "Message": str(e)
         })
 
-# Function to write Excel sheet
-def write_sheet(wb, sheet_name, data, base_columns, tag_keys):
-    ws = wb.create_sheet(sheet_name)
-    tag_keys_sorted = sorted(tag_keys)
-    headers = base_columns + tag_keys_sorted
-    ws.append(headers)
-    for item in data:
-        row = [item.get(col, "") for col in headers]
-        ws.append(row)
-    print(f"[EXCEL] ✅ Sheet '{sheet_name}' written with {len(data)} row(s) and {len(headers)} column(s)")
+    with pd.ExcelWriter(PARTIAL_FILE, engine="xlsxwriter") as writer:
+        pd.DataFrame(subscription_data).to_excel(writer, sheet_name="Subscription Tags", index=False)
+        pd.DataFrame(rg_tag_data).to_excel(writer, sheet_name="Resource Group Tags", index=False)
+    print(f"💾 Partial saved after: {sub_name}")
 
-# Create Excel workbook
-wb = Workbook()
-wb.remove(wb.active)  # remove default sheet
+# ---------------------
+# 📤 Final Save
+# ---------------------
+with pd.ExcelWriter(FINAL_FILE, engine="xlsxwriter") as writer:
+    pd.DataFrame(subscription_data).to_excel(writer, sheet_name="Subscription Tags", index=False)
+    pd.DataFrame(rg_tag_data).to_excel(writer, sheet_name="Resource Group Tags", index=False)
 
-print("\n[INFO] Writing data to Excel workbook...")
-write_sheet(wb, "Subscription Tags", subscriptions_data, ["Subscription Name", "Subscription ID"], subscription_tag_keys)
-write_sheet(wb, "ResourceGroup Tags", resource_groups_data, ["Subscription Name", "Subscription ID", "Resource Group", "Location"], rg_tag_keys)
-
-# Save Excel file
-filename = f"Azure_Subscription_RG_Tags_{datetime.now().strftime('%Y%m%d')}.xlsx"
-wb.save(filename)
-print(f"\n✅ [SUCCESS] Report saved to file: {filename}")
-
-# End execution timer
-end_time = time.time()
-elapsed_time = end_time - start_time
-print(f"⏱️ [INFO] Total execution time: {elapsed_time:.2f} seconds")
+# ---------------------
+# ⏱️ Execution Time
+# ---------------------
+elapsed = time.time() - start_time
+h, m, s = int(elapsed // 3600), int((elapsed % 3600) // 60), round(elapsed % 60, 2)
+print(f"\n✅ Completed {len(subscription_data)} subscriptions and {total_rgs} resource groups")
+print(f"📁 Final output saved to: {FINAL_FILE}")
+print(f"⏱️ Completed in {h}h {m}m {s}s")
