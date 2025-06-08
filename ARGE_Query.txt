@@ -1,9 +1,19 @@
 Resources
 | where type == "microsoft.keyvault/vaults"
-| extend privateEndpointConnections = properties.privateEndpointConnections
-| where isempty(privateEndpointConnections)
+| extend 
+    privateEndpointConnections = properties.privateEndpointConnections,
+    peStatus = iif(
+        isempty(privateEndpointConnections), 
+        "NotConfigured", 
+        strcat_array(
+            array_map((pe) => tostring(pe.properties.privateLinkServiceConnectionState.status), privateEndpointConnections), 
+            ", "
+        )
+    )
+| where peStatus == "NotConfigured" // optional: remove this filter to see all statuses
 | project 
     subscriptionId,
     subscriptionName,
     resourceGroup,
-    resourceName = name
+    resourceName = name,
+    privateEndpointStatus = peStatus
