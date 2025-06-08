@@ -1,0 +1,15 @@
+Resources
+| where type == "microsoft.network/publicipaddresses"
+| extend ipAssigned = isempty(properties.ipConfiguration.id)
+| where ipAssigned == true
+| project
+    name,
+    type,
+    id,
+    subscriptionId,
+    resourceGroup,
+    location,
+    tags,
+    sku,
+    zones,
+    properties.*
