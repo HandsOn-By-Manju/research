@@ -1,32 +1,9 @@
 Resources
 | where type == "microsoft.keyvault/vaults"
-| extend 
-    vaultName = name,
-    privateEndpointConnections = properties.privateEndpointConnections
+| extend privateEndpointConnections = properties.privateEndpointConnections
 | where isempty(privateEndpointConnections)
 | project 
-    vaultName,
-    id,
-    type,
     subscriptionId,
+    subscriptionName,
     resourceGroup,
-    location,
-    // Access Control
-    rbacEnabled = properties.enableRbacAuthorization,
-    accessPolicies = properties.accessPolicies,
-    tenantId = tostring(properties.tenantId),
-    // Networking
-    publicNetworkAccess = tostring(properties.publicNetworkAccess),
-    defaultAction = tostring(properties.networkAcls.defaultAction),
-    bypass = tostring(properties.networkAcls.bypass),
-    ipRules = properties.networkAcls.ipRules,
-    vnetRules = properties.networkAcls.virtualNetworkRules,
-    // Security
-    enableSoftDelete = tostring(properties.enableSoftDelete),
-    enablePurgeProtection = tostring(properties.enablePurgeProtection),
-    // Configuration
-    vaultUri = tostring(properties.vaultUri),
-    skuName = sku.name,
-    skuFamily = sku.family,
-    // Tags
-    tags
+    resourceName = name
