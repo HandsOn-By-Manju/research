@@ -24,3 +24,13 @@ Resources
     bypass = tostring(properties.networkAcls.bypass)
 | where defaultAction == "Allow"
 | project subscriptionId, resourceGroup, vaultName, location, defaultAction, bypass
+
+
+Resources
+| where type == "microsoft.keyvault/vaults"
+| extend
+    vaultName = name,
+    privateEndpoints = properties.privateEndpointConnections
+| where isempty(privateEndpoints)
+| project subscriptionId, resourceGroup, vaultName, location
+
